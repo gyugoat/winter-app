@@ -58,13 +58,21 @@ export function SnowBackground() {
       return m ? [+m[1], +m[2], +m[3]] : [200, 220, 255];
     }
 
-    function draw() {
+    let lastTime = 0;
+    const TARGET_FPS = 60;
+    const FRAME_MS = 1000 / TARGET_FPS;
+
+    function draw(now: number) {
+      if (!lastTime) lastTime = now;
+      const dt = Math.min(now - lastTime, 100) / FRAME_MS;
+      lastTime = now;
+
       ctx!.clearRect(0, 0, W, H);
       const [r, g, b] = parseRgb(snowRgb);
       for (const f of flakes) {
-        f.y += f.speed;
-        f.wobble = (f.wobble + f.wobbleSpeed) % (Math.PI * 2);
-        f.x += f.drift + Math.sin(f.wobble) * 0.3;
+        f.y += f.speed * dt;
+        f.wobble = (f.wobble + f.wobbleSpeed * dt) % (Math.PI * 2);
+        f.x += (f.drift + Math.sin(f.wobble) * 0.3) * dt;
 
         if (f.y > H + 5) { f.y = -5; f.x = Math.random() * W; }
         if (f.x > W + 5) f.x = -5;
@@ -75,7 +83,7 @@ export function SnowBackground() {
         ctx!.fillStyle = `rgba(${r},${g},${b},${f.opacity})`;
         ctx!.fill();
       }
-      animId = requestAnimationFrame(draw);
+    animId = requestAnimationFrame((t) => draw(t));
     }
 
     resize();
