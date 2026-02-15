@@ -61,6 +61,6 @@ jobs:
           tagName: v__VERSION__
           releaseName: 'Winter v__VERSION__'
           releaseBody: 'See the assets to download and install Winter.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
