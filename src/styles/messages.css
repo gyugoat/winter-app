@@ -1,0 +1,128 @@
+.message-list {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.message-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.message-empty-diamond {
+  width: 56px;
+  height: 56px;
+  background: var(--diamond-color);
+  transform: rotate(45deg);
+  border-radius: 5px;
+  box-shadow: 0 0 30px var(--glow-diamond), 0 0 60px var(--glow-diamond);
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: rotate(45deg) translateY(0); }
+  50% { transform: rotate(45deg) translateY(-8px); }
+}
+
+.message-empty-text {
+  font-size: 51px;
+  color: var(--text-emphasis);
+  font-weight: 600;
+  font-family: var(--font-sans);
+  letter-spacing: 0.02em;
+}
+
+/* Message row */
+.message-row {
+  display: flex;
+  gap: 10px;
+  max-width: 80%;
+  animation: msgIn 0.3s ease-out;
+}
+
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message-row.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+/* Diamond avatar */
+.message-avatar {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.message-diamond {
+  width: 22px;
+  height: 22px;
+  background: var(--diamond-color);
+  transform: rotate(45deg);
+  border-radius: 3px;
+  transition: box-shadow 0.2s;
+  position: relative;
+}
+
+.message-diamond::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  box-shadow: 0 0 0 transparent;
+  transition: box-shadow 0.2s;
+}
+
+.message-row:hover .message-diamond::after {
+  box-shadow: 0 0 16px var(--glow-diamond), 0 0 32px var(--glow-diamond);
+}
+
+/* Bubble */
+.message-bubble {
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.message-row.assistant .message-bubble {
+  background: var(--bubble-winter);
+  border-top-left-radius: 4px;
+}
+
+.message-row.user .message-bubble {
+  background: var(--bubble-user);
+  border-top-right-radius: 4px;
+}
+
+.message-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.message-row:hover .message-time {
+  opacity: 1;
+}

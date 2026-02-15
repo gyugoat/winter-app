@@ -1,0 +1,285 @@
+/* ── Sub-page (Tier 2): replaces chat content area ── */
+
+.settings-subpage {
+  position: relative;
+  flex: 1;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: settingsPageIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes settingsPageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.settings-subpage-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 24px;
+}
+
+.settings-subpage-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.settings-subpage-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+/* ── Shortcuts grid ── */
+
+.settings-shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.settings-shortcut-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: background 0.15s;
+}
+
+.settings-shortcut-card:hover {
+  background: var(--bg-hover);
+}
+
+.settings-shortcut-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ── Personalize cards ── */
+
+.settings-personalize-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.settings-card:hover {
+  background: var(--bg-hover);
+}
+
+.settings-card-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-card-title-italic {
+  font-style: italic;
+}
+
+.settings-card-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.settings-card-link {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-card-link:hover {
+  text-decoration: underline;
+}
+
+.settings-badges {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+}
+
+/* ── Language list ── */
+
+.settings-language-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-language-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: background 0.12s, color 0.12s;
+  text-align: left;
+}
+
+.settings-language-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-language-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+
+.settings-language-name {
+  flex: 1;
+}
+
+/* ── Feedback ── */
+
+.settings-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.settings-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-textarea:focus {
+  border-color: var(--accent);
+}
+
+.settings-feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settings-send-btn {
+  padding: 8px 24px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-send-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+/* ── Advanced pill ── */
+
+.settings-advanced-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 24px;
+}
+
+.settings-advanced-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-advanced-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 768px) {
+  .settings-shortcuts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .settings-subpage-scroll {
+    padding: 24px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-subpage-scroll {
+    padding: 20px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-subpage {
+    animation: none;
+  }
+}

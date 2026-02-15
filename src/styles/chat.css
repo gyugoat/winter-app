@@ -1,0 +1,79 @@
+.chat-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.chat-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  padding-left: 50px;
+  transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-body.sidebar-open {
+  padding-left: 230px;
+}
+
+.chat-body.sidebar-collapsed {
+  padding-left: 50px;
+}
+
+/* ── "Winter ❄." brand mark ── */
+
+.chat-brand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 0 0 24px;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  user-select: none;
+  transition: opacity 0.3s;
+}
+
+.chat-brand-diamond {
+  transition: box-shadow 0.3s ease;
+}
+
+.chat-brand-diamond-animate {
+  animation: brandDiamondFloat 2s ease-in-out infinite;
+}
+
+@keyframes brandDiamondFloat {
+  0%, 100% { transform: rotate(45deg) translateY(0); }
+  50% { transform: rotate(45deg) translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-brand-diamond-animate {
+    animation: none;
+  }
+}
+
+.chat-brand-dot {
+  color: var(--accent);
+  margin-left: -2px;
+}
+
+.chat-brand:hover {
+  opacity: 0.7;
+}
+
+.chat-brand.dimmed {
+  opacity: 0.3;
+  cursor: pointer;
+}
+
+.chat-brand.dimmed:hover {
+  opacity: 0.5;
+}

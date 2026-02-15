@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;700&display=swap');
+
+:root, [data-theme="dark"] {
+  --bg-deep: #0f0d1a;
+  --bg-panel: #13111f;
+  --bg-elevated: #1a1730;
+  --bg-hover: #221f35;
+  --bg-active: #2a2645;
+  --bubble-winter: rgba(139, 92, 246, 0.13);
+  --bubble-user: rgba(59, 130, 246, 0.13);
+  --text-primary: #e5e5e5;
+  --text-secondary: #a1a1a1;
+  --text-muted: #555;
+  --accent: #7aa2f7;
+  --accent-hover: #a8c8ff;
+  --accent-purple: #8b5cf6;
+  --border: rgba(255, 255, 255, 0.06);
+  --glow-diamond: rgba(122, 162, 247, 0.5);
+  --snow-particle: rgba(200, 220, 255, 1);
+  --diamond-color: rgba(200, 220, 255, 0.85);
+  --accent-subtle: rgba(122, 162, 247, 0.15);
+  --accent-subtle-hover: rgba(122, 162, 247, 0.10);
+  --accent-active: rgba(122, 162, 247, 0.18);
+  --accent-flash: rgba(122, 162, 247, 0.35);
+  --input-focus-border: rgba(122, 162, 247, 0.10);
+  --danger: #e81123;
+  --danger-text: #f87171;
+  --danger-bg: rgba(239, 68, 68, 0.15);
+  --overlay-bg: rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --window-border: rgba(255, 255, 255, 0.12);
+  --text-on-accent: #fff;
+  --text-emphasis: #ffffff;
+  --font-sans: 'Inter', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+[data-theme="light"] {
+  --bg-deep: #F0F8FF;
+  --bg-panel: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: #E0F2FE;
+  --bg-active: #DBEAFE;
+  --bubble-winter: rgba(2, 132, 199, 0.08);
+  --bubble-user: rgba(59, 130, 246, 0.1);
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --accent: #0284C7;
+  --accent-hover: #0369A1;
+  --accent-purple: #7C3AED;
+  --border: rgba(186, 230, 253, 0.6);
+  --glow-diamond: rgba(2, 132, 199, 0.35);
+  --snow-particle: rgba(160, 200, 240, 1);
+  --diamond-color: rgba(2, 132, 199, 0.7);
+  --accent-subtle: rgba(2, 132, 199, 0.1);
+  --accent-subtle-hover: rgba(2, 132, 199, 0.18);
+  --accent-active: rgba(2, 132, 199, 0.15);
+  --accent-flash: rgba(2, 132, 199, 0.25);
+  --input-focus-border: rgba(2, 132, 199, 0.3);
+  --danger: #dc2626;
+  --danger-text: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.1);
+  --overlay-bg: rgba(0, 0, 0, 0.15);
+  --shadow-elevated: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --window-border: rgba(60, 60, 60, 0.35);
+  --text-on-accent: #fff;
+  --text-emphasis: #0F172A;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  user-select: none;
+  border-radius: 10px;
+  border: 1px solid var(--window-border);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  outline: none;
+}
+
+input, textarea {
+  font-family: inherit;
+  outline: none;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+#root.win-minimize {
+  transform: scale(0.4) translateY(60vh);
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 1, 1), opacity 0.2s ease;
+}
+
+#root.win-restore {
+  animation: winRestore 0.25s ease-out;
+}
+
+@keyframes winRestore {
+  0% { transform: scale(0.85) translateY(20px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+#root.win-maximize-out {
+  transform: scale(0.96);
+  opacity: 0.7;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 1, 1), opacity 0.12s ease;
+}
+
+#root.win-maximize-in {
+  animation: winMaxIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes winMaxIn {
+  0% { transform: scale(1.03); opacity: 0.6; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes clickFlash {
+  0% { background: var(--accent-flash); }
+  100% { background: transparent; }
+}
+
+.click-flash {
+  animation: clickFlash 0.3s ease-out;
+}
