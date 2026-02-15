@@ -371,6 +371,7 @@ struct TokenResponse {
 
 struct PkceState {
     verifier: String,
+    #[allow(dead_code)]
     created: u64,
 }
 
@@ -489,7 +490,7 @@ async fn exchange_code(app: AppHandle, code: String) -> Result<(), String> {
 async fn is_authenticated(app: AppHandle) -> Result<bool, String> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
     match store.get(STORE_KEY_ACCESS) {
-        Some(val) => Ok(val.as_str().map_or(false, |s| !s.is_empty())),
+        Some(val) => Ok(val.as_str().is_some_and(|s| !s.is_empty())),
         None => Ok(false),
     }
 }
