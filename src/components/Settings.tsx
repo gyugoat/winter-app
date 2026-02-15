@@ -1,52 +1,59 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { load } from '@tauri-apps/plugin-store';
 import type { SettingsPageId } from './Chat';
+import type { Session } from '../types';
+import { Diamond } from './Diamond';
+import { MBTI_PERSONALITIES } from '../data/mbti-personalities';
 import { useClickFlash } from '../hooks/useClickFlash';
+import { useI18n, type Locale, type TranslationKey } from '../i18n';
 import '../styles/settings.css';
+import '../styles/archive.css';
 
 interface SettingsPageProps {
   page: SettingsPageId;
   onClose: () => void;
+  sessions?: Session[];
+  onSwitchSession?: (id: string) => void;
 }
 
-const LANGUAGES = [
-  { code: 'EN', name: 'English' },
-  { code: 'KO', name: 'Korean' },
-  { code: 'JP', name: 'Japanese' },
-  { code: 'CN', name: 'Chinese' },
-  { code: 'ES', name: 'Spanish' },
-  { code: 'FR', name: 'French' },
-  { code: 'DE', name: 'German' },
-  { code: 'PT', name: 'Portuguese' },
-  { code: 'IT', name: 'Italian' },
-  { code: 'RU', name: 'Russian' },
-  { code: 'AR', name: 'Arabic' },
-  { code: 'HI', name: 'Hindi' },
-  { code: 'TH', name: 'Thai' },
-  { code: 'VI', name: 'Vietnamese' },
-  { code: 'NL', name: 'Dutch' },
-  { code: 'SV', name: 'Swedish' },
+const SUPPORTED_LANGUAGES: { locale: Locale; code: string; name: string }[] = [
+  { locale: 'en', code: 'EN', name: 'English' },
+  { locale: 'ko', code: 'KO', name: 'Korean' },
+  { locale: 'ja', code: 'JP', name: 'Japanese' },
+  { locale: 'zh', code: 'CN', name: 'Chinese' },
 ];
 
-const SHORTCUT_LABELS = [
-  'New session', 'Search', 'Close',
-  'Next chat', 'Prev chat', 'Settings',
+const SHORTCUT_KEYS = [
+  { labelKey: 'shortcutNewSession' as const, keys: 'Ctrl + N' },
+  { labelKey: 'shortcutArchive' as const, keys: 'Ctrl + Q' },
+  { labelKey: 'shortcutPrevSession' as const, keys: 'Ctrl + [' },
+  { labelKey: 'shortcutNextSession' as const, keys: 'Ctrl + ]' },
+  { labelKey: 'shortcutDeleteSession' as const, keys: 'Ctrl + ⌫' },
+  { labelKey: 'shortcutAttachFile' as const, keys: 'Ctrl + K' },
+  { labelKey: 'shortcutAlwaysOnTop' as const, keys: 'Ctrl + P' },
+  { labelKey: 'shortcutPrevMessage' as const, keys: 'Ctrl + ↑' },
+  { labelKey: 'shortcutStopResponse' as const, keys: 'Esc' },
 ];
 
-const MBTI_BADGES = ['I', 'N', 'T', 'J'];
+const MBTI_PAIRS: [string, string][] = [['I', 'E'], ['N', 'S'], ['T', 'F'], ['J', 'P']];
 
-const PAGE_TITLES: Record<SettingsPageId, string> = {
-  shortcuts: 'Shortcuts',
-  personalize: 'Personalize',
-  language: 'Language',
-  feedback: 'How did Winter do?',
+const PAGE_TITLE_KEYS: Record<SettingsPageId, TranslationKey> = {
+  shortcuts: 'shortcuts',
+  personalize: 'personalize',
+  language: 'language',
+  feedback: 'feedbackTitle',
+  archive: 'archiveTitle',
 };
 
 function ShortcutsContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
+  const { t } = useI18n();
   return (
     <div className="settings-shortcuts-grid">
-      {SHORTCUT_LABELS.map((label) => (
-        <button key={label} className="settings-shortcut-card" onClick={onFlash}>
-          <span className="settings-shortcut-label">{label}</span>
+      {SHORTCUT_KEYS.map((shortcut) => (
+        <button key={shortcut.labelKey} className="settings-shortcut-card" onClick={onFlash}>
+          <span className="settings-shortcut-label">{t(shortcut.labelKey)}</span>
+          <span className="settings-shortcut-keys">{shortcut.keys}</span>
         </button>
       ))}
     </div>
@@ -54,42 +61,97 @@ function ShortcutsContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLEleme
 }
 
 function PersonalizeContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
+  const { t } = useI18n();
+  const [mbtiLetters, setMbtiLetters] = useState<string[]>(['I', 'N', 'T', 'J']);
+  const [animatingIdx, setAnimatingIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const store = await load('settings.json');
+        const saved = await store.get<string>('mbti_type');
+        if (saved && typeof saved === 'string' && saved.length === 4) {
+          setMbtiLetters(saved.split(''));
+        }
+      } catch {}
+    })();
+  }, []);
+
+  const randomizeMbti = async (e: React.MouseEvent<HTMLElement>) => {
+    onFlash(e);
+    const newLetters = MBTI_PAIRS.map(pair => pair[Math.random() < 0.5 ? 0 : 1]);
+
+    for (let i = 0; i < 4; i++) {
+      setTimeout(() => {
+        setAnimatingIdx(i);
+        setMbtiLetters(prev => {
+          const next = [...prev];
+          next[i] = newLetters[i];
+          return next;
+        });
+      }, i * 120);
+    }
+
+    setTimeout(() => setAnimatingIdx(null), 4 * 120 + 300);
+
+    try {
+      const mbtiType = newLetters.join('');
+      const personality = MBTI_PERSONALITIES[mbtiType];
+      const store = await load('settings.json');
+      await store.set('mbti_type', mbtiType);
+      if (personality) {
+        await store.set('mbti_prompt_modifier', personality.promptModifier);
+      }
+      await store.save();
+    } catch {}
+  };
+
   return (
     <div className="settings-personalize-cards">
       <button className="settings-card" onClick={onFlash}>
-        <span className="settings-card-title">Apps</span>
-        <span className="settings-card-subtitle">link your shit</span>
+        <span className="settings-card-title">{t('personalizeApps')}</span>
+        <span className="settings-card-subtitle">{t('personalizeAppsSubtitle')}</span>
       </button>
       <button className="settings-card" onClick={onFlash}>
-        <span className="settings-card-title settings-card-title-italic">Automation</span>
-        <span className="settings-card-subtitle">Auto mate your errands</span>
+        <span className="settings-card-title settings-card-title-italic">{t('personalizeAutomation')}</span>
+        <span className="settings-card-subtitle">{t('personalizeAutomationSubtitle')}</span>
       </button>
-      <button className="settings-card" onClick={onFlash}>
+      <div className="settings-card">
         <div className="settings-card-row">
-          <span className="settings-card-title">Winter is</span>
+          <span className="settings-card-title">{t('personalizeWinterIs')}</span>
           <div className="settings-badges">
-            {MBTI_BADGES.map((letter) => (
-              <span key={letter} className="settings-badge">{letter}</span>
+            {mbtiLetters.map((letter, i) => (
+              <span
+                key={i}
+                className={`settings-badge${animatingIdx !== null && i <= animatingIdx ? ' settings-badge-pop' : ''}`}
+              >
+                {letter}
+              </span>
             ))}
+            <button className="settings-mbti-diamond-btn" onClick={randomizeMbti}>
+              <Diamond size={16} glow={true} className="settings-mbti-diamond" />
+            </button>
           </div>
         </div>
         <span className="settings-card-subtitle">
-          {'feeling lucky \u00b7 '}
-          <span className="settings-card-link">something fun?</span>
+          {t('personalizeFeelingLucky') + ' \u00b7 '}
+          <span className="settings-card-link">{t('personalizeSomethingFun')}</span>
         </span>
-      </button>
+      </div>
     </div>
   );
 }
 
 function LanguageContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
+  const { locale, setLocale } = useI18n();
+
   return (
     <div className="settings-language-list">
-      {LANGUAGES.map((lang) => (
+      {SUPPORTED_LANGUAGES.map((lang) => (
         <button
           key={lang.code}
-          className="settings-language-item"
-          onClick={onFlash}
+          className={`settings-language-item${locale === lang.locale ? ' active' : ''}`}
+          onClick={(e) => { onFlash(e); setLocale(lang.locale); }}
         >
           <span className="settings-language-code">{lang.code}</span>
           <span className="settings-language-name">{lang.name}</span>
@@ -100,27 +162,162 @@ function LanguageContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
 }
 
 function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
+  const { t } = useI18n();
   const [feedbackText, setFeedbackText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle');
+
+  const handleSend = async (e: React.MouseEvent<HTMLElement>) => {
+    onFlash(e);
+    if (!feedbackText.trim() || sending) return;
+    setSending(true);
+    setStatus('idle');
+    try {
+      await invoke('send_feedback', { text: feedbackText.trim() });
+      setStatus('sent');
+      setFeedbackText('');
+    } catch {
+      setStatus('error');
+    }
+    setSending(false);
+  };
 
   return (
     <div className="settings-feedback">
       <textarea
         className="settings-textarea"
-        placeholder="Tell us what you think..."
+        placeholder={t('feedbackPlaceholder')}
         value={feedbackText}
         onChange={(e) => setFeedbackText(e.target.value)}
       />
       <div className="settings-feedback-actions">
-        <button className="settings-send-btn" onClick={onFlash}>
-          send
+        {status === 'sent' && <span className="settings-feedback-status sent">{t('feedbackSent')}</span>}
+        {status === 'error' && <span className="settings-feedback-status error">{t('feedbackError')}</span>}
+        <button
+          className="settings-send-btn"
+          onClick={handleSend}
+          disabled={sending || !feedbackText.trim()}
+        >
+          {sending ? t('feedbackSending') : t('feedbackSend')}
         </button>
       </div>
     </div>
   );
 }
 
-export function SettingsPage({ page, onClose }: SettingsPageProps) {
+function ArchiveContent({
+  onFlash,
+  sessions,
+  onSwitchSession,
+}: {
+  onFlash: (e: React.MouseEvent<HTMLElement>) => void;
+  sessions: Session[];
+  onSwitchSession: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [sparkleId, setSparkleId] = useState<string | null>(null);
+
+  const grouped = sessions.reduce<Record<string, Session[]>>((acc, session) => {
+    const date = new Date(session.createdAt);
+    const key = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(session);
+    return acc;
+  }, {});
+
+  const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+  const handleDateClick = (e: React.MouseEvent<HTMLElement>, date: string) => {
+    onFlash(e);
+    setSparkleId(date);
+    setTimeout(() => {
+      setSparkleId(null);
+      setSelectedDate(date);
+    }, 400);
+  };
+
+  if (selectedDate && grouped[selectedDate]) {
+    const dateSessions = grouped[selectedDate];
+    const half = Math.ceil(dateSessions.length / 2);
+    const leftCol = dateSessions.slice(0, half);
+    const rightCol = dateSessions.slice(half);
+
+    return (
+      <div className="archive-detail">
+        <button
+          className="archive-back-btn"
+          onClick={(e) => { onFlash(e); setSelectedDate(null); }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          {selectedDate}
+        </button>
+        <div className="archive-grid">
+          <div className="archive-grid-col">
+            {leftCol.map((session) => (
+              <button
+                key={session.id}
+                className="archive-session-card"
+                onClick={(e) => { onFlash(e); onSwitchSession(session.id); }}
+              >
+                <span className="archive-session-name">{session.name}</span>
+                <span className="archive-session-preview">
+                  {session.messages[0]?.content.slice(0, 80) || t('archiveEmptySession')}
+                </span>
+                <span className="archive-session-count">
+                  {session.messages.length} {t('archiveMessages')}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="archive-grid-col">
+            {rightCol.map((session) => (
+              <button
+                key={session.id}
+                className="archive-session-card"
+                onClick={(e) => { onFlash(e); onSwitchSession(session.id); }}
+              >
+                <span className="archive-session-name">{session.name}</span>
+                <span className="archive-session-preview">
+                  {session.messages[0]?.content.slice(0, 80) || t('archiveEmptySession')}
+                </span>
+                <span className="archive-session-count">
+                  {session.messages.length} {t('archiveMessages')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="archive-list">
+      {sortedDates.length === 0 && (
+        <div className="archive-empty">{t('archiveEmpty')}</div>
+      )}
+      {sortedDates.map((date) => (
+        <button
+          key={date}
+          className={`archive-date-block${sparkleId === date ? ' archive-sparkle' : ''}`}
+          onClick={(e) => handleDateClick(e, date)}
+        >
+          <span className="archive-date-label">{date}</span>
+          <span className="archive-date-count">
+            {grouped[date].length} {t('sessions').toLowerCase()}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function SettingsPage({ page, onClose, sessions, onSwitchSession }: SettingsPageProps) {
   const onFlash = useClickFlash();
+  const { t } = useI18n();
 
   const renderContent = () => {
     switch (page) {
@@ -132,14 +329,27 @@ export function SettingsPage({ page, onClose }: SettingsPageProps) {
         return <LanguageContent onFlash={onFlash} />;
       case 'feedback':
         return <FeedbackContent onFlash={onFlash} />;
+      case 'archive':
+        return (
+          <ArchiveContent
+            onFlash={onFlash}
+            sessions={sessions ?? []}
+            onSwitchSession={(id) => {
+              onSwitchSession?.(id);
+              onClose();
+            }}
+          />
+        );
     }
   };
 
+  const pageTitle = t(PAGE_TITLE_KEYS[page]);
+
   return (
-    <div className="settings-subpage" role="region" aria-label={PAGE_TITLES[page]}>
+    <div className="settings-subpage" role="region" aria-label={pageTitle}>
       <div className="settings-subpage-scroll">
         <div className="settings-subpage-inner">
-          <h2 className="settings-subpage-title">{PAGE_TITLES[page]}</h2>
+          <h2 className="settings-subpage-title">{pageTitle}</h2>
 
           {renderContent()}
 
@@ -149,7 +359,7 @@ export function SettingsPage({ page, onClose }: SettingsPageProps) {
                 className="settings-advanced-btn"
                 onClick={(e) => { onFlash(e); onClose(); }}
               >
-                Advanced
+                {t('advanced')}
               </button>
             </div>
           )}

@@ -1,6 +1,13 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke, Channel } from '@tauri-apps/api/core';
+import { load, type Store } from '@tauri-apps/plugin-store';
 import type { Message, Session, ChatStreamEvent } from '../types';
+
+const STORE_FILE = 'sessions.json';
+const STORE_KEY_SESSIONS = 'sessions';
+const STORE_KEY_ACTIVE = 'active_session_id';
+const STORE_KEY_IS_DRAFT = 'is_draft';
+const SAVE_DEBOUNCE_MS = 500;
 
 function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -15,12 +22,99 @@ function createSession(name: string): Session {
   };
 }
 
+/** Validate that loaded data is actually a Session[] */
+function isValidSessions(data: unknown): data is Session[] {
+  if (!Array.isArray(data)) return false;
+  return data.every(
+    (s) =>
+      typeof s === 'object' &&
+      s !== null &&
+      typeof (s as Session).id === 'string' &&
+      typeof (s as Session).name === 'string' &&
+      Array.isArray((s as Session).messages) &&
+      typeof (s as Session).createdAt === 'number'
+  );
+}
+
 export function useChat() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isDraft, setIsDraft] = useState(true);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const sessionCounter = useRef(0);
+  const storeRef = useRef<Store | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load sessions from store on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const store = await load(STORE_FILE);
+        storeRef.current = store;
+
+        const savedSessions = await store.get<Session[]>(STORE_KEY_SESSIONS);
+        const savedActive = await store.get<string | null>(STORE_KEY_ACTIVE);
+        const savedIsDraft = await store.get<boolean>(STORE_KEY_IS_DRAFT);
+
+        if (isValidSessions(savedSessions) && savedSessions.length > 0) {
+          // Strip isStreaming from any messages (in case app crashed mid-stream)
+          const cleanSessions = savedSessions.map((s) => ({
+            ...s,
+            messages: s.messages.map((m) => ({ ...m, isStreaming: false })),
+          }));
+          setSessions(cleanSessions);
+          sessionCounter.current = cleanSessions.length;
+
+          if (savedIsDraft === true) {
+            setIsDraft(true);
+            setActiveSessionId(null);
+          } else if (
+            typeof savedActive === 'string' &&
+            cleanSessions.some((s) => s.id === savedActive)
+          ) {
+            setActiveSessionId(savedActive);
+            setIsDraft(false);
+          } else {
+            // Active session not found, show last session
+            setActiveSessionId(cleanSessions[cleanSessions.length - 1].id);
+            setIsDraft(false);
+          }
+        }
+      } catch {
+        // Store doesn't exist or is corrupt — start fresh
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  // Debounced save to store whenever sessions/activeSessionId/isDraft change
+  useEffect(() => {
+    if (!loaded) return; // Don't save before initial load
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      const store = storeRef.current;
+      if (!store) return;
+      try {
+        // Strip isStreaming from messages before saving
+        const toSave = sessions.map((s) => ({
+          ...s,
+          messages: s.messages.map(({ isStreaming: _, ...rest }) => rest),
+        }));
+        await store.set(STORE_KEY_SESSIONS, toSave);
+        await store.set(STORE_KEY_ACTIVE, activeSessionId);
+        await store.set(STORE_KEY_IS_DRAFT, isDraft);
+        await store.save();
+      } catch {
+        // Silent fail on save — don't crash the app
+      }
+    }, SAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [sessions, activeSessionId, isDraft, loaded]);
 
   const activeSession = activeSessionId
     ? sessions.find((s) => s.id === activeSessionId) ?? null
@@ -197,6 +291,16 @@ export function useChat() {
     [updateSession]
   );
 
+  const archiveSession = useCallback(
+    (id: string) => {
+      updateSession(id, (s) => ({ ...s, archived: true }));
+    },
+    [updateSession]
+  );
+
+  const activeSessions = sessions.filter((s) => !s.archived);
+  const archivedSessions = sessions.filter((s) => s.archived);
+
   const draftSession: Session = {
     id: '__draft__',
     name: 'New session',
@@ -205,15 +309,18 @@ export function useChat() {
   };
 
   return {
-    sessions,
+    sessions: activeSessions,
+    archivedSessions,
     activeSession: activeSession ?? draftSession,
     activeSessionId: activeSessionId ?? '__draft__',
     isDraft,
     isStreaming,
+    loaded,
     sendMessage,
     addSession,
     switchSession,
     deleteSession,
     renameSession,
+    archiveSession,
   };
 }

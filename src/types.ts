@@ -11,6 +11,7 @@ export interface Session {
   name: string;
   messages: Message[];
   createdAt: number;
+  archived?: boolean;
 }
 
 export type ChatStreamEvent =

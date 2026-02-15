@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Titlebar } from './Titlebar';
 import { Sidebar } from './Sidebar';
 import { MessageList } from './MessageList';
@@ -7,9 +8,10 @@ import { SnowBackground } from './SnowBackground';
 import { SettingsPage } from './Settings';
 import { Diamond } from './Diamond';
 import { useChat } from '../hooks/useChat';
+import { useShortcuts } from '../hooks/useShortcuts';
 import '../styles/chat.css';
 
-export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback';
+export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive';
 
 interface ChatProps {
   onReauth?: () => void;
@@ -25,6 +27,7 @@ export function Chat({ onReauth }: ChatProps) {
   const prevSettingsRef = useRef<SettingsPageId | null>(null);
   const {
     sessions,
+    archivedSessions,
     activeSession,
     activeSessionId,
     sendMessage,
@@ -33,7 +36,39 @@ export function Chat({ onReauth }: ChatProps) {
     switchSession,
     deleteSession,
     renameSession,
+    archiveSession,
   } = useChat();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const shortcutActions = useMemo(() => ({
+    onNewSession: () => { addSession(); setSettingsPage(null); },
+    onArchiveSession: () => { if (activeSessionId !== '__draft__') archiveSession(activeSessionId); },
+    onPrevSession: () => {
+      const idx = sessions.findIndex((s) => s.id === activeSessionId);
+      if (idx > 0) switchSession(sessions[idx - 1].id);
+    },
+    onNextSession: () => {
+      const idx = sessions.findIndex((s) => s.id === activeSessionId);
+      if (idx >= 0 && idx < sessions.length - 1) switchSession(sessions[idx + 1].id);
+    },
+    onDeleteSession: () => {
+      if (activeSessionId !== '__draft__') deleteSession(activeSessionId);
+    },
+    onAttachFile: () => fileInputRef.current?.click(),
+    onStopStreaming: () => { invoke('abort_stream').catch(() => {}); },
+    isStreaming,
+    sessions,
+    activeSessionId,
+  }), [addSession, sessions, activeSessionId, switchSession, deleteSession, archiveSession, isStreaming]);
+
+  const { addToHistory, getPreviousSent, getNextSent, resetHistoryIndex } = useShortcuts(shortcutActions);
+
+  const handleSendMessage = useCallback((text: string) => {
+    addToHistory(text);
+    resetHistoryIndex();
+    sendMessage(text);
+  }, [sendMessage, addToHistory, resetHistoryIndex]);
 
   const triggerDiamondGlow = useCallback(() => {
     setDiamondGlow(true);
@@ -73,6 +108,7 @@ export function Chat({ onReauth }: ChatProps) {
           onNewSession={() => { addSession(); setSettingsPage(null); triggerDiamondGlow(); }}
           onSwitchSession={handleSwitchSession}
           onDeleteSession={deleteSession}
+          onArchiveSession={archiveSession}
           onRenameSession={renameSession}
           onSelectSettingsPage={(page) => setSettingsPage(page)}
           onReauth={onReauth ?? (() => {})}
@@ -94,11 +130,21 @@ export function Chat({ onReauth }: ChatProps) {
           <SettingsPage
             page={settingsPage}
             onClose={() => setSettingsPage(null)}
+            sessions={archivedSessions}
+            onSwitchSession={(id) => { handleSwitchSession(id); setSettingsPage(null); }}
           />
         ) : (
           <>
             <MessageList messages={activeSession.messages} />
-            <MessageInput onSend={sendMessage} disabled={isStreaming} />
+            <MessageInput
+              onSend={handleSendMessage}
+              disabled={isStreaming}
+              isStreaming={isStreaming}
+              onStop={() => invoke('abort_stream').catch(() => {})}
+              onHistoryUp={getPreviousSent}
+              onHistoryDown={getNextSent}
+              fileInputRef={fileInputRef}
+            />
           </>
         )}
       </div>

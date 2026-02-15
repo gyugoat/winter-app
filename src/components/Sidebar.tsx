@@ -3,6 +3,7 @@ import type { Session } from '../types';
 import type { SettingsPageId } from './Chat';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';
+import { useI18n } from '../i18n';
 import '../styles/sidebar.css';
 
 interface SidebarProps {
@@ -13,6 +14,7 @@ interface SidebarProps {
   onNewSession: () => void;
   onSwitchSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
+  onArchiveSession: (id: string) => void;
   onRenameSession: (id: string, name: string) => void;
   onSelectSettingsPage: (page: SettingsPageId) => void;
   onReauth: () => void;
@@ -84,10 +86,10 @@ const MENU_ICONS = {
   ),
 };
 
-const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
-  { value: 'light', label: 'Day' },
-  { value: 'dark', label: 'Night' },
-  { value: 'system', label: 'System' },
+const THEME_OPTIONS: { value: ThemeMode; labelKey: 'themeDay' | 'themeNight' | 'themeSystem' }[] = [
+  { value: 'light', labelKey: 'themeDay' },
+  { value: 'dark', labelKey: 'themeNight' },
+  { value: 'system', labelKey: 'themeSystem' },
 ];
 
 type SubPopup = 'theme' | 'token' | null;
@@ -100,11 +102,13 @@ export function Sidebar({
   onNewSession,
   onSwitchSession,
   onDeleteSession,
+  onArchiveSession,
   onRenameSession,
   onSelectSettingsPage,
   onReauth,
 }: SidebarProps) {
   const onFlash = useClickFlash();
+  const { t } = useI18n();
   const [menuId, setMenuId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -219,10 +223,10 @@ export function Sidebar({
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          New session
+          {t('newSession')}
         </button>
 
-        <div className="sidebar-label">Sessions</div>
+        <div className="sidebar-label">{t('sessions')}</div>
 
         <div className="sidebar-sessions">
           {sessions.map((session) => (
@@ -256,13 +260,13 @@ export function Sidebar({
               {menuId === session.id && (
                 <div className="sidebar-menu" onClick={(e) => e.stopPropagation()}>
                   <button className="sidebar-menu-item" onClick={() => startRename(session)}>
-                    Rename
+                    {t('rename')}
                   </button>
-                  <button className="sidebar-menu-item" onClick={() => setMenuId(null)}>
-                    Archive
+                  <button className="sidebar-menu-item" onClick={() => { onArchiveSession(session.id); setMenuId(null); }}>
+                    {t('archive')}
                   </button>
                   <button className="sidebar-menu-item danger" onClick={() => { onDeleteSession(session.id); setMenuId(null); }}>
-                    Delete
+                    {t('delete')}
                   </button>
                 </div>
               )}
@@ -282,7 +286,7 @@ export function Sidebar({
                   role="menuitem"
                 >
                   <span className="settings-popup-icon">{MENU_ICONS.theme}</span>
-                  <span className="settings-popup-label">Theme</span>
+                  <span className="settings-popup-label">{t('theme')}</span>
                   <span className="settings-popup-arrow">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="9 18 15 12 9 6" />
@@ -299,7 +303,7 @@ export function Sidebar({
                         role="menuitemradio"
                         aria-checked={mode === opt.value}
                       >
-                        <span>{opt.label}</span>
+                        <span>{t(opt.labelKey)}</span>
                         {mode === opt.value && (
                           <span className="settings-sub-popup-check">{MENU_ICONS.check}</span>
                         )}
@@ -316,7 +320,7 @@ export function Sidebar({
                 role="menuitem"
               >
                 <span className="settings-popup-icon">{MENU_ICONS.shortcuts}</span>
-                <span className="settings-popup-label">Shortcuts</span>
+                <span className="settings-popup-label">{t('shortcuts')}</span>
                 <span className="settings-popup-chevron">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
@@ -331,7 +335,7 @@ export function Sidebar({
                   role="menuitem"
                 >
                   <span className="settings-popup-icon">{MENU_ICONS.token}</span>
-                  <span className="settings-popup-label">Token</span>
+                  <span className="settings-popup-label">{t('token')}</span>
                   <span className="settings-popup-arrow">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="9 18 15 12 9 6" />
@@ -341,11 +345,11 @@ export function Sidebar({
                 {subPopup === 'token' && (
                   <div className="settings-sub-popup" role="menu" aria-label="Token">
                     <div className="settings-sub-popup-item" role="menuitem">
-                      <span>Session</span>
+                      <span>{t('tokenSession')}</span>
                       <span className="settings-sub-popup-stat">0</span>
                     </div>
                     <div className="settings-sub-popup-item" role="menuitem">
-                      <span>Weekly</span>
+                      <span>{t('tokenWeekly')}</span>
                       <span className="settings-sub-popup-stat">0</span>
                     </div>
                     <button
@@ -358,7 +362,7 @@ export function Sidebar({
                       }}
                       role="menuitem"
                     >
-                      <span>Auth</span>
+                      <span>{t('tokenAuth')}</span>
                     </button>
                   </div>
                 )}
@@ -371,7 +375,7 @@ export function Sidebar({
                 role="menuitem"
               >
                 <span className="settings-popup-icon">{MENU_ICONS.language}</span>
-                <span className="settings-popup-label">Language</span>
+                <span className="settings-popup-label">{t('language')}</span>
                 <span className="settings-popup-chevron">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
@@ -386,7 +390,7 @@ export function Sidebar({
                 role="menuitem"
               >
                 <span className="settings-popup-icon">{MENU_ICONS.feedback}</span>
-                <span className="settings-popup-label">Send feedback</span>
+                <span className="settings-popup-label">{t('sendFeedback')}</span>
                 <span className="settings-popup-chevron">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
@@ -396,13 +400,17 @@ export function Sidebar({
 
               {/* Archive — placeholder */}
               <button
-                className="settings-popup-item disabled"
-                onClick={(e) => onFlash(e)}
+                className="settings-popup-item"
+                onClick={(e) => { onFlash(e); handleSubPage('archive'); }}
                 role="menuitem"
-                aria-disabled="true"
               >
                 <span className="settings-popup-icon">{MENU_ICONS.archive}</span>
-                <span className="settings-popup-label">Archive</span>
+                <span className="settings-popup-label">{t('archive')}</span>
+                <span className="settings-popup-chevron">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
               </button>
 
               {/* Personalize — opens sub-page */}
@@ -412,7 +420,7 @@ export function Sidebar({
                 role="menuitem"
               >
                 <span className="settings-popup-icon">{MENU_ICONS.personalize}</span>
-                <span className="settings-popup-label">Personalize</span>
+                <span className="settings-popup-label">{t('personalize')}</span>
                 <span className="settings-popup-chevron">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
@@ -430,7 +438,7 @@ export function Sidebar({
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
-            Settings
+            {t('settings')}
           </button>
         </div>
       </aside>

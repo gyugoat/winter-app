@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { useI18n } from '../i18n';
 import '../styles/auth.css';
 
 interface AuthProps {
@@ -9,6 +10,7 @@ interface AuthProps {
 }
 
 export function Auth({ getAuthorizeUrl, onExchangeCode, onSkip }: AuthProps) {
+  const { t } = useI18n();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -40,28 +42,26 @@ export function Auth({ getAuthorizeUrl, onExchangeCode, onSkip }: AuthProps) {
     <div className="auth">
       <form className="auth-card" onSubmit={handleSubmit}>
         <div className="auth-diamond" />
-        <h2 className="auth-title">Welcome to Winter</h2>
-        <p className="auth-subtitle">
-          Authorize with your Claude account to get started.
-        </p>
+        <h2 className="auth-title">{t('authTitle')}</h2>
+        <p className="auth-subtitle">{t('authSubtitle')}</p>
 
         <div className="auth-step">
-          <div className="auth-step-label">Step 1 — Authorize</div>
+          <div className="auth-step-label">{t('authStep1')}</div>
           <button
             type="button"
             className="auth-link-btn"
             onClick={handleAuthorize}
           >
-            Open Authorization Page →
+            {t('authOpenAuth')}
           </button>
         </div>
 
         <div className="auth-step">
-          <div className="auth-step-label">Step 2 — Paste the code</div>
+          <div className="auth-step-label">{t('authStep2')}</div>
           <input
             className="auth-input"
             type="text"
-            placeholder="Paste authorization code here..."
+            placeholder={t('authPastePlaceholder')}
             value={code}
             onChange={(e) => setCode(e.target.value)}
             autoFocus
@@ -75,7 +75,7 @@ export function Auth({ getAuthorizeUrl, onExchangeCode, onSkip }: AuthProps) {
           className="auth-submit"
           disabled={!code.trim() || submitting}
         >
-          {submitting ? 'Connecting...' : 'Continue'}
+          {submitting ? t('authConnecting') : t('authContinue')}
         </button>
 
         <button
@@ -83,7 +83,7 @@ export function Auth({ getAuthorizeUrl, onExchangeCode, onSkip }: AuthProps) {
           className="auth-skip"
           onClick={onSkip}
         >
-          Skip for now →
+          {t('authSkip')}
         </button>
       </form>
     </div>

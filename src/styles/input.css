@@ -91,3 +91,12 @@
   background: var(--accent-subtle);
   color: var(--accent-hover);
 }
+
+.input-stop {
+  color: var(--danger-text, #ef4444);
+}
+
+.input-stop:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger-text, #ef4444);
+}

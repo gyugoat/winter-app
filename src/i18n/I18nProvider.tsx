@@ -1,0 +1,42 @@
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { load } from '@tauri-apps/plugin-store';
+import { I18nContext, getTranslations, type Locale, type TranslationKey } from './index';
+
+const STORE_FILE = 'settings.json';
+const STORE_KEY = 'language';
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>('en');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const store = await load(STORE_FILE);
+        const saved = await store.get<string>(STORE_KEY);
+        if (saved && ['en', 'ko', 'ja', 'zh'].includes(saved)) {
+          setLocaleState(saved as Locale);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  const setLocale = useCallback(async (l: Locale) => {
+    setLocaleState(l);
+    try {
+      const store = await load(STORE_FILE);
+      await store.set(STORE_KEY, l);
+      await store.save();
+    } catch {}
+  }, []);
+
+  const translations = useMemo(() => getTranslations(locale), [locale]);
+  const t = useCallback((key: TranslationKey) => translations[key], [translations]);
+
+  const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
+
+  return (
+    <I18nContext.Provider value={value}>
+      {children}
+    </I18nContext.Provider>
+  );
+}

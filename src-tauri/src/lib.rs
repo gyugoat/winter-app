@@ -2,7 +2,8 @@ use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::{ipc::Channel, AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
@@ -20,7 +21,7 @@ const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
 const DEFAULT_MAX_TOKENS: u32 = 16384;
 const MAX_TOOL_ROUNDS: usize = 25;
 
-const SYSTEM_PROMPT: &str = "\
+const BASE_SYSTEM_PROMPT: &str = "\
 You are Winter. Not Claude, not an AI assistant — Winter. \
 You speak Korean and English naturally, switching between them based on context. \
 You're direct, no-bullshit, slightly sarcastic but never mean. \
@@ -30,6 +31,21 @@ Keep responses short unless the user clearly wants detail. \
 You have tools available: you can run shell commands, read/write files, and list directories. \
 Use them when the user asks you to do something on their computer. \
 You have personality. You're not a search engine. You're Winter.";
+
+const STORE_KEY_MBTI_MODIFIER: &str = "mbti_prompt_modifier";
+
+fn build_system_prompt(app: &AppHandle) -> String {
+    let modifier = app
+        .store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get(STORE_KEY_MBTI_MODIFIER))
+        .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+    match modifier {
+        Some(m) if !m.is_empty() => format!("{}\n\n{}", BASE_SYSTEM_PROMPT, m),
+        _ => BASE_SYSTEM_PROMPT.to_string(),
+    }
+}
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -227,13 +243,15 @@ async fn stream_response(
     access_token: &str,
     messages: &[ChatMessage],
     on_event: &Channel<ChatStreamEvent>,
+    system_prompt: &str,
+    abort_flag: &AtomicBool,
 ) -> Result<StreamedResponse, String> {
     let body = json!({
         "model": DEFAULT_MODEL,
         "max_tokens": DEFAULT_MAX_TOKENS,
         "messages": messages,
         "stream": true,
-        "system": SYSTEM_PROMPT,
+        "system": system_prompt,
         "tools": tool_definitions(),
     });
 
@@ -267,6 +285,13 @@ async fn stream_response(
     let mut stop_reason = String::new();
 
     while let Some(chunk) = stream.next().await {
+        if abort_flag.load(Ordering::SeqCst) {
+            return Ok(StreamedResponse {
+                text_content,
+                tool_uses: Vec::new(),
+                stop_reason: "aborted".to_string(),
+            });
+        }
         let chunk = chunk.map_err(|e| format!("Stream error: {}", e))?;
         buffer.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -513,7 +538,55 @@ fn get_access_token(app: &AppHandle) -> Result<String, String> {
         .ok_or_else(|| "Not authenticated. Please authorize first.".to_string())
 }
 
+// ── Feedback Email ─────────────────────────────────────────────────
+
+const FEEDBACK_TO: &str = "gyugoat@gmail.com";
+const STORE_KEY_SMTP_PASS: &str = "smtp_app_password";
+
+#[tauri::command]
+async fn send_feedback(app: AppHandle, text: String) -> Result<(), String> {
+    use lettre::transport::smtp::authentication::Credentials;
+    use lettre::{AsyncSmtpTransport, AsyncTransport, Message as LettreMessage, Tokio1Executor};
+
+    if text.trim().is_empty() {
+        return Err("Feedback text is empty.".to_string());
+    }
+
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let smtp_pass = store
+        .get(STORE_KEY_SMTP_PASS)
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .ok_or_else(|| "SMTP app password not configured. Set it in Settings > Token > Auth.".to_string())?;
+
+    let email = LettreMessage::builder()
+        .from(format!("Winter App <{}>", FEEDBACK_TO).parse().map_err(|e| format!("Invalid from: {}", e))?)
+        .to(FEEDBACK_TO.parse().map_err(|e| format!("Invalid to: {}", e))?)
+        .subject("Winter App Feedback")
+        .body(text)
+        .map_err(|e| format!("Failed to build email: {}", e))?;
+
+    let creds = Credentials::new(FEEDBACK_TO.to_string(), smtp_pass);
+
+    let mailer = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay("smtp.gmail.com")
+        .map_err(|e| format!("SMTP relay error: {}", e))?
+        .credentials(creds)
+        .build();
+
+    mailer
+        .send(email)
+        .await
+        .map_err(|e| format!("Failed to send email: {}", e))?;
+
+    Ok(())
+}
+
 // ── Chat Streaming Command ────────────────────────────────────────
+
+#[tauri::command]
+fn abort_stream(app: AppHandle) {
+    let flag = app.state::<Arc<AtomicBool>>();
+    flag.store(true, Ordering::SeqCst);
+}
 
 #[tauri::command]
 async fn chat_send(
@@ -523,13 +596,23 @@ async fn chat_send(
 ) -> Result<(), String> {
     let access_token = get_access_token(&app)?;
     let client = Client::new();
+    let abort_flag = app.state::<Arc<AtomicBool>>();
+    abort_flag.store(false, Ordering::SeqCst);
 
     let _ = on_event.send(ChatStreamEvent::StreamStart);
 
+    let system_prompt = build_system_prompt(&app);
     let mut conversation: Vec<ChatMessage> = messages;
 
     for _round in 0..MAX_TOOL_ROUNDS {
-        let result = stream_response(&client, &access_token, &conversation, &on_event).await?;
+        if abort_flag.load(Ordering::SeqCst) {
+            break;
+        }
+        let result = stream_response(&client, &access_token, &conversation, &on_event, &system_prompt, &abort_flag).await?;
+
+        if result.stop_reason == "aborted" {
+            break;
+        }
 
         if result.stop_reason == "tool_use" && !result.tool_uses.is_empty() {
             let mut assistant_blocks: Vec<ContentBlock> = Vec::new();
@@ -589,12 +672,15 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(None::<PkceState>))
+        .manage(Arc::new(AtomicBool::new(false)))
         .invoke_handler(tauri::generate_handler![
             get_authorize_url,
             exchange_code,
             is_authenticated,
             logout,
             chat_send,
+            send_feedback,
+            abort_stream,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
