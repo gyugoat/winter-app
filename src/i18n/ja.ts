@@ -77,7 +77,7 @@ export const ja: Record<TranslationKey, string> = {
   readmeTip3: 'Winterはステップごとに作業します。大きなタスクは始める前に計画を見せてくれます。',
   readmeConfirm: 'いこう！',
 
-  splashFirstGreeting: 'はじめまして',
+  splashFirstGreeting: '반가워!',
   splashReturn1: 'おかえり！',
   splashReturn2: 'また来たね',
   splashReturn3: '会いたかった',

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';
 import type { SettingsPageId } from './Chat';
@@ -205,6 +205,42 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
   const [feedbackText, setFeedbackText] = useState('');
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle');
+  const [smtpPass, setSmtpPass] = useState('');
+  const [smtpLoaded, setSmtpLoaded] = useState(false);
+  const [smtpSaved, setSmtpSaved] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const smtpSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const store = await load('settings.json');
+        const saved = await store.get<string>('smtp_app_password');
+        if (saved && typeof saved === 'string') setSmtpPass(saved);
+      } catch {}
+      setSmtpLoaded(true);
+    })();
+    return () => {
+      if (smtpSaveTimer.current) clearTimeout(smtpSaveTimer.current);
+    };
+  }, []);
+
+  const saveSmtpPass = (value: string) => {
+    setSmtpPass(value);
+    setSmtpSaved(false);
+    if (smtpSaveTimer.current) clearTimeout(smtpSaveTimer.current);
+    smtpSaveTimer.current = setTimeout(async () => {
+      try {
+        const store = await load('settings.json');
+        await store.set('smtp_app_password', value);
+        await store.save();
+        if (value.trim()) {
+          setSmtpSaved(true);
+          setTimeout(() => setSmtpSaved(false), 2000);
+        }
+      } catch {}
+    }, 500);
+  };
 
   const handleSend = async (e: React.MouseEvent<HTMLElement>) => {
     onFlash(e);
@@ -215,15 +251,49 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
       await invoke('send_feedback', { text: feedbackText.trim() });
       setStatus('sent');
       setFeedbackText('');
-      setTimeout(() => setStatus('idle'), 3000); // 3초 뒤 상태 초기화
     } catch {
       setStatus('error');
     }
     setSending(false);
   };
 
+  const hasSmtp = smtpPass.trim().length > 0;
+
   return (
     <div className="settings-feedback">
+      <div className="settings-smtp-row">
+        <label className="settings-smtp-label">{t('smtpPassword')}</label>
+        <div className="settings-smtp-input-wrap">
+          <input
+            className="settings-smtp-input"
+            type={showPass ? 'text' : 'password'}
+            value={smtpLoaded ? smtpPass : ''}
+            placeholder={t('smtpPasswordPlaceholder')}
+            onChange={(e) => saveSmtpPass(e.target.value)}
+          />
+          <button
+            className="settings-smtp-toggle"
+            onClick={(e) => { onFlash(e); setShowPass(!showPass); }}
+          >
+            {showPass ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            )}
+          </button>
+        </div>
+        {smtpSaved && <span className="settings-feedback-status sent">{t('smtpSaved')}</span>}
+      </div>
+      {!hasSmtp && (
+        <span className="settings-smtp-hint">{t('smtpRequired')}</span>
+      )}
       <textarea
         className="settings-textarea"
         placeholder={t('feedbackPlaceholder')}
@@ -236,7 +306,7 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
         <button
           className="settings-send-btn"
           onClick={handleSend}
-          disabled={sending || !feedbackText.trim()}
+          disabled={sending || !feedbackText.trim() || !hasSmtp}
         >
           {sending ? t('feedbackSending') : t('feedbackSend')}
         </button>

@@ -229,7 +229,9 @@ export function Splash({ onDone, returning = false }: SplashProps) {
       <canvas ref={canvasRef} />
       <div className={`splash-diamond${showGreeting ? ' shrink' : ''}`} />
       <span className={`splash-title${showGreeting ? ' hide' : ''}`}>Winter</span>
-      <span className={`splash-greeting${showGreeting ? ' visible' : ''}`}>
+      <span className={`splash-greeting${showGreeting ? ' visible' : ''}`}
+	style={{ marginTop: '-60px' }}
+	>
         {t(greetingKeyRef.current)}
       </span>
     </div>

@@ -74,7 +74,7 @@ export const en = {
   readmeTip2: 'Be specific about what you want. "Make a website" is okay, "Make a portfolio site with dark theme and three sections" is better.',
   readmeTip3: 'Winter works step by step. For big tasks, it\u2019ll show you a plan before starting.',
   readmeConfirm: 'Let\u2019s go!',
-  splashFirstGreeting: 'Nice to meet you',
+  splashFirstGreeting: '반가워!',
   splashReturn1: 'Hey there!',
   splashReturn2: 'You\u2019re back',
   splashReturn3: 'Missed you',

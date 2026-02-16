@@ -77,7 +77,7 @@ export const zh: Record<TranslationKey, string> = {
   readmeTip3: 'Winter一步一步工作。大任务会在开始前先给你看计划。',
   readmeConfirm: '走起！',
 
-  splashFirstGreeting: '你好',
+  splashFirstGreeting: '반가워!',
   splashReturn1: '回来了！',
   splashReturn2: '又见面了',
   splashReturn3: '想你了',

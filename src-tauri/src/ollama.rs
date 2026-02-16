@@ -3,8 +3,10 @@ use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
+use std::process::Command; 
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
+use tauri_plugin_opener::OpenerExt;
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 const DEFAULT_OLLAMA_MODEL: &str = "qwen2.5:14b";
@@ -57,29 +59,66 @@ pub fn get_settings(app: &AppHandle) -> OllamaSettings {
 // ── Installation ───────────────────────────────────────────────────
 
 pub async fn is_installed() -> bool {
-    tokio::process::Command::new("which")
-        .arg("ollama")
-        .output()
-        .await
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    if cfg!(target_os = "windows") {
+        Command::new("where")
+            .arg("ollama")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    } else {
+        Command::new("which")
+            .arg("ollama")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
 }
 
-pub async fn install() -> Result<String, String> {
-    let output = tokio::process::Command::new("bash")
-        .arg("-c")
-        .arg("curl -fsSL https://ollama.com/install.sh | sh 2>&1")
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run installer: {}", e))?;
+pub async fn install(app: &AppHandle) -> Result<String, String> {
+    if cfg!(target_os = "windows") {
+        // [Windows] winget 시도
+        let output = tokio::process::Command::new("winget")
+            .args(["install", "Ollama.Ollama"])
+            .output()
+            .await;
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        match output {
+            Ok(o) if o.status.success() => {
+                Ok("Ollama installed via winget! Please restart the app.".to_string())
+            }
+            _ => {
+                let _ = app.opener().open_url("https://ollama.com/download/windows", None::<&str>);
+                Ok("Winget failed. Opened download page in browser.".to_string())
+            }
+        }
+    } else if cfg!(target_os = "macos") {
+        // [macOS] brew 시도
+        let brew_check = tokio::process::Command::new("which")
+            .arg("brew")
+            .output()
+            .await;
 
-    if output.status.success() {
-        Ok(format!("{}\n{}", stdout, stderr).trim().to_string())
+        if let Ok(o) = brew_check {
+            if o.status.success() {
+                let install_cmd = tokio::process::Command::new("brew")
+                    .args(["install", "ollama"])
+                    .output()
+                    .await;
+                
+                match install_cmd {
+                    Ok(out) if out.status.success() => {
+                        return Ok("Ollama installed via Homebrew! Please restart.".to_string());
+                    }
+                    _ => { println!("Brew install failed."); }
+                }
+            }
+        }
+        let _ = app.opener().open_url("https://ollama.com/download/mac", None::<&str>);
+        Ok("Homebrew not found or failed. Opened download page.".to_string())
     } else {
-        Err(format!("Install failed (exit {}):\n{}\n{}", output.status.code().unwrap_or(-1), stdout, stderr))
+        // [Linux]
+        let _ = app.opener().open_url("https://ollama.com/download/linux", None::<&str>);
+        Ok("Opened download page for Linux.".to_string())
     }
 }
 
@@ -92,120 +131,54 @@ fn build_client() -> Result<Client, String> {
         .map_err(|e| format!("Failed to build HTTP client: {}", e))
 }
 
-/// Check if Ollama is running, return version string.
 pub async fn check_health(base_url: &str) -> Result<String, String> {
     let client = build_client()?;
     let url = format!("{}/api/version", base_url);
 
     #[derive(Deserialize)]
-    struct VersionResp {
-        version: String,
-    }
+    struct VersionResp { version: String }
 
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Ollama not reachable: {}", e))?;
-
-    let data: VersionResp = resp
-        .json()
-        .await
-        .map_err(|e| format!("Invalid version response: {}", e))?;
-
+    let resp = client.get(&url).send().await.map_err(|e| format!("Ollama unreachable: {}", e))?;
+    let data: VersionResp = resp.json().await.map_err(|e| format!("Invalid version: {}", e))?;
     Ok(data.version)
 }
 
-/// List locally available model names.
 pub async fn list_models(base_url: &str) -> Result<Vec<String>, String> {
     let client = build_client()?;
     let url = format!("{}/api/tags", base_url);
 
-    #[derive(Deserialize)]
-    struct Model {
-        name: String,
-    }
+    #[derive(Deserialize)] struct Model { name: String }
+    #[derive(Deserialize)] struct ModelsResp { models: Vec<Model> }
 
-    #[derive(Deserialize)]
-    struct ModelsResp {
-        models: Vec<Model>,
-    }
-
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to list models: {}", e))?;
-
-    let data: ModelsResp = resp
-        .json()
-        .await
-        .map_err(|e| format!("Invalid models response: {}", e))?;
-
+    let resp = client.get(&url).send().await.map_err(|e| format!("List failed: {}", e))?;
+    let data: ModelsResp = resp.json().await.map_err(|e| format!("Invalid models: {}", e))?;
     Ok(data.models.into_iter().map(|m| m.name).collect())
 }
 
-/// Summarize text using Ollama. Skips if text is short.
 pub async fn summarize(base_url: &str, model: &str, text: &str) -> Result<String, String> {
-    if text.len() < MIN_SUMMARIZE_LEN {
-        return Ok(text.to_string());
-    }
+    if text.len() < MIN_SUMMARIZE_LEN { return Ok(text.to_string()); }
 
     let client = build_client()?;
     let url = format!("{}/api/generate", base_url);
-
-    let prompt = format!(
-        "Summarize the following content concisely, preserving key details. \
-         Use the same language as the original content. Output ONLY the summary:\n\n{}",
-        text
-    );
+    let prompt = format!("Summarize concisely:\n\n{}", text);
 
     let body = json!({
-        "model": model,
-        "prompt": prompt,
-        "stream": false,
-        "options": {
-            "temperature": 0.3,
-            "num_predict": 512
-        }
+        "model": model, "prompt": prompt, "stream": false,
+        "options": { "temperature": 0.3, "num_predict": 512 }
     });
 
-    #[derive(Deserialize)]
-    struct GenResp {
-        response: String,
-    }
-
-    let resp = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Ollama generate failed: {}", e))?;
-
+    #[derive(Deserialize)] struct GenResp { response: String }
+    let resp = client.post(&url).json(&body).send().await.map_err(|e| format!("Gen failed: {}", e))?;
+    
     if !resp.status().is_success() {
-        let status = resp.status();
-        let body_text = resp.text().await.unwrap_or_default();
-        return Err(format!("Ollama error {}: {}", status, body_text));
+        return Err(format!("Ollama error: {}", resp.status()));
     }
-
-    let data: GenResp = resp
-        .json()
-        .await
-        .map_err(|e| format!("Invalid generate response: {}", e))?;
-
+    let data: GenResp = resp.json().await.map_err(|e| format!("Invalid json: {}", e))?;
     Ok(data.response.trim().to_string())
 }
 
-/// Compress conversation history if it exceeds the threshold.
-/// Keeps last `keep` messages intact, summarizes the rest.
-pub async fn compress_history(
-    base_url: &str,
-    model: &str,
-    messages: &[ChatMessage],
-) -> Result<Vec<ChatMessage>, String> {
-    if messages.len() <= HISTORY_COMPRESS_THRESHOLD {
-        return Ok(messages.to_vec());
-    }
+pub async fn compress_history(base_url: &str, model: &str, messages: &[ChatMessage]) -> Result<Vec<ChatMessage>, String> {
+    if messages.len() <= HISTORY_COMPRESS_THRESHOLD { return Ok(messages.to_vec()); }
 
     let keep = 4;
     let to_compress = &messages[..messages.len() - keep];
@@ -213,62 +186,31 @@ pub async fn compress_history(
 
     let mut transcript = String::new();
     for msg in to_compress {
-        let role = &msg.role;
-        let text = extract_text_content(&msg.content);
-        if !text.is_empty() {
-            transcript.push_str(&format!("[{}]: {}\n\n", role, text));
-        }
+        transcript.push_str(&format!("[{}]: {}\n\n", msg.role, extract_text_content(&msg.content)));
     }
 
-    if transcript.len() < MIN_SUMMARIZE_LEN {
-        return Ok(messages.to_vec());
-    }
-
+    if transcript.len() < MIN_SUMMARIZE_LEN { return Ok(messages.to_vec()); }
     let summary = summarize(base_url, model, &transcript).await?;
 
-    let mut result = Vec::with_capacity(1 + keep);
+    let mut result = Vec::with_capacity(2 + keep);
     result.push(ChatMessage {
         role: "user".to_string(),
-        content: MessageContent::Text(format!(
-            "[Previous conversation summary — {} messages compressed]\n{}",
-            to_compress.len(),
-            summary
-        )),
+        content: MessageContent::Text(format!("[Summary of {} messages]\n{}", to_compress.len(), summary)),
     });
     result.push(ChatMessage {
         role: "assistant".to_string(),
-        content: MessageContent::Text("Understood, I have the context from our previous conversation.".to_string()),
+        content: MessageContent::Text("Context received.".to_string()),
     });
     result.extend_from_slice(to_keep);
-
     Ok(result)
 }
 
-/// Extract text from MessageContent (handles both Text and Blocks).
 fn extract_text_content(content: &MessageContent) -> String {
     match content {
         MessageContent::Text(s) => s.clone(),
-        MessageContent::Blocks(blocks) => {
-            let mut parts = Vec::new();
-            for block in blocks {
-                match block {
-                    ContentBlock::Text { text } => parts.push(text.clone()),
-                    ContentBlock::ToolResult { content, .. } => {
-                        if content.len() > 200 {
-                            parts.push(format!("[tool result: {}... ({} chars)]", &content[..100], content.len()));
-                        } else {
-                            parts.push(content.clone());
-                        }
-                    }
-                    ContentBlock::ToolUse { name, .. } => {
-                        parts.push(format!("[called tool: {}]", name));
-                    }
-                    ContentBlock::Image { .. } => {
-                        parts.push("[image]".to_string());
-                    }
-                }
-            }
-            parts.join("\n")
-        }
+        MessageContent::Blocks(blocks) => blocks.iter().map(|b| match b {
+            ContentBlock::Text { text } => text.clone(),
+            _ => "[Tool/Image]".to_string(),
+        }).collect::<Vec<_>>().join("\n"),
     }
 }
