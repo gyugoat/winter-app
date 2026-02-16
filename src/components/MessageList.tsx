@@ -139,7 +139,7 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
     () =>
       filteredMessages.map((msg) => ({
         ...msg,
-        html: msg.role === 'assistant'
+        html: msg.role === 'assistant' && msg.content
           ? (searchQuery
               ? highlightText(renderMarkdown(msg.content), searchQuery)
               : renderMarkdown(msg.content))
@@ -169,11 +169,21 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
             </div>
           )}
           <div>
-            {msg.html ? (
-              <div
-                className="message-bubble message-bubble-markdown"
-                dangerouslySetInnerHTML={{ __html: msg.html }}
-              />
+            {msg.statusText && msg.isStreaming && !msg.content ? (
+              <div className="message-bubble message-status">
+                {msg.statusText === 'thinking' ? (
+                  <span className="thinking-dots"><span /><span /><span /></span>
+                ) : (
+                  <span className="status-label">{msg.statusText}</span>
+                )}
+              </div>
+            ) : msg.html ? (
+              <div className="message-bubble message-bubble-markdown">
+                <div dangerouslySetInnerHTML={{ __html: msg.html }} />
+                {msg.statusText && msg.isStreaming && (
+                  <div className="message-inline-status">{msg.statusText}</div>
+                )}
+              </div>
             ) : searchQuery ? (
               <div
                 className="message-bubble"

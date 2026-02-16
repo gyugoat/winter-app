@@ -9,6 +9,7 @@ export interface Message {
   content: string;
   timestamp: number;
   isStreaming?: boolean;
+  statusText?: string;
   images?: ImageAttachment[];
 }
 
@@ -18,6 +19,7 @@ export interface Session {
   messages: Message[];
   createdAt: number;
   archived?: boolean;
+  ocSessionId?: string;
 }
 
 export type ChatStreamEvent =
@@ -28,4 +30,5 @@ export type ChatStreamEvent =
   | { event: 'stream_end' }
   | { event: 'error'; data: { message: string } }
   | { event: 'ollama_status'; data: { status: string } }
+  | { event: 'status'; data: { text: string } }
   | { event: 'usage'; data: { input_tokens: number; output_tokens: number } };

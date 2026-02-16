@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Titlebar } from './Titlebar';
 import { Sidebar } from './Sidebar';
 import { MessageList } from './MessageList';
@@ -50,6 +49,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     deleteSession,
     renameSession,
     archiveSession,
+    abortOpencode,
   } = useChat();
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -107,13 +107,13 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
       }
     },
     onAttachFile: () => fileInputRef.current?.click(),
-    onStopStreaming: () => { invoke('abort_stream').catch(() => {}); },
+    onStopStreaming: () => abortOpencode(),
     onFocusInput: () => inputFocusRef.current(),
     onSearch: toggleSearch,
     isStreaming,
     sessions,
     activeSessionId,
-  }), [addSession, sessions, activeSessionId, switchSession, deleteSession, archiveSession, isStreaming, showToast, toggleSearch]);
+  }), [addSession, sessions, activeSessionId, switchSession, deleteSession, archiveSession, isStreaming, showToast, toggleSearch, abortOpencode]);
 
   const { addToHistory, getPreviousSent, getNextSent, resetHistoryIndex } = useShortcuts(shortcutActions);
 
@@ -188,11 +188,11 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
               {toast.text}
             </span>
           )}
-          {(usage.input > 0 || usage.output > 0) && (
-            <span className="chat-usage">
-              {usage.input.toLocaleString()} / {usage.output.toLocaleString()}
-            </span>
-          )}
+      {/* {(usage.input > 0 || usage.output > 0) && (
+      <span className="chat-usage">
+      {usage.input.toLocaleString()} / {usage.output.toLocaleString()}
+      </span>
+      )} */}
         </button>
         {searchOpen && (
           <div className="chat-search-bar">
@@ -231,7 +231,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
               onSend={handleSendMessage}
               disabled={isStreaming}
               isStreaming={isStreaming}
-              onStop={() => invoke('abort_stream').catch(() => {})}
+              onStop={abortOpencode}
               onHistoryUp={getPreviousSent}
               onHistoryDown={getNextSent}
               fileInputRef={fileInputRef}

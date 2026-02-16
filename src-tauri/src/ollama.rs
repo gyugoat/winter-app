@@ -9,10 +9,20 @@ use tauri_plugin_store::StoreExt;
 use tauri_plugin_opener::OpenerExt;
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
-const DEFAULT_OLLAMA_MODEL: &str = "qwen2.5:14b";
 const OLLAMA_TIMEOUT: Duration = Duration::from_secs(30);
 const MIN_SUMMARIZE_LEN: usize = 500;
 const HISTORY_COMPRESS_THRESHOLD: usize = 10;
+
+fn default_model_for_system() -> String {
+    let sys = sysinfo::System::new_all();
+    let avail_gb = sys.available_memory() / (1024 * 1024 * 1024);
+    let budget_gb = avail_gb / 4;
+    match budget_gb {
+        0..=2 => "qwen2.5:3b",
+        3..=4 => "qwen2.5:7b",
+        _ => "qwen2.5:14b",
+    }.to_string()
+}
 
 pub struct OllamaSettings {
     pub enabled: bool,
@@ -29,7 +39,7 @@ pub fn get_settings(app: &AppHandle) -> OllamaSettings {
             return OllamaSettings {
                 enabled: false,
                 base_url: DEFAULT_OLLAMA_URL.to_string(),
-                model: DEFAULT_OLLAMA_MODEL.to_string(),
+                model: default_model_for_system(),
             };
         }
     };
@@ -47,7 +57,7 @@ pub fn get_settings(app: &AppHandle) -> OllamaSettings {
     let model = store
         .get("ollama_model")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
-        .unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string());
+        .unwrap_or_else(default_model_for_system);
 
     OllamaSettings {
         enabled,

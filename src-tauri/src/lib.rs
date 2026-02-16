@@ -1,4 +1,5 @@
 mod ollama;
+mod opencode;
 
 use futures::StreamExt;
 use reqwest::Client;
@@ -128,6 +129,8 @@ pub enum ChatStreamEvent {
     Error { message: String },
     #[serde(rename = "ollama_status")]
     OllamaStatus { status: String },
+    #[serde(rename = "status")]
+    Status { text: String },
     #[serde(rename = "usage")]
     Usage {
         input_tokens: u64,
@@ -539,11 +542,13 @@ async fn refresh_access_token(app: &AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 async fn send_feedback(_app: AppHandle, text: String) -> Result<(), String> {
-    const DISCORD_WEBHOOK_URL: &str = env!("DISCORD_WEBHOOK_URL");
+    // 1. URL은 상수로 깔끔하게 분리 (env! 매크로 제거)
+    const DISCORD_WEBHOOK_URL: &str = "https://discord.com/api/webhooks/1472879486923046963/dncdu4PiCQXR6vG7H0Tp6m1WB37MJlArhskCuStnqpiBih7qsrvYzVa2YwGdRwQNK35K";
 
     if text.trim().is_empty() {
         return Err("Feedback text is empty.".to_string());
     }
+
     let client = reqwest::Client::new();
     let payload = serde_json::json!({
         "username": "Winter Bot",
@@ -551,6 +556,7 @@ async fn send_feedback(_app: AppHandle, text: String) -> Result<(), String> {
         "content": format!("❄️ **User Feedback Received!**\n>>> {}", text)
     });
 
+    // 2. 여기서는 상수를 가져다 쓰기
     let resp = client.post(DISCORD_WEBHOOK_URL)
         .json(&payload)
         .send()
@@ -563,7 +569,6 @@ async fn send_feedback(_app: AppHandle, text: String) -> Result<(), String> {
 
     Ok(())
 }
-
 // ── Ollama Commands ────────────────────────────────────────────────
 
 #[tauri::command]
@@ -673,7 +678,107 @@ async fn set_session_key(app: AppHandle, key: String) -> Result<(), String> {
     Ok(())
 }
 
-// ── Chat Streaming Command ────────────────────────────────────────
+// ── OpenCode Bridge Commands ───────────────────────────────────────
+
+const DEFAULT_OPENCODE_URL: &str = "http://127.0.0.1:6096";
+
+#[tauri::command]
+async fn opencode_check(app: AppHandle) -> Result<bool, String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let enabled = store
+        .get("opencode_enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    if !enabled {
+        return Ok(false);
+    }
+
+    let base_url = store
+        .get("opencode_url")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_URL.to_string());
+
+    let client = opencode::OpenCodeClient::new(base_url);
+    Ok(client.health_check().await)
+}
+
+#[tauri::command]
+async fn opencode_create_session(app: AppHandle) -> Result<String, String> {
+    let client = get_opencode_client(&app)?;
+    let session = client.create_session().await?;
+    Ok(session.id)
+}
+
+#[tauri::command]
+async fn opencode_send(
+    app: AppHandle,
+    oc_session_id: String,
+    content: String,
+    on_event: Channel<ChatStreamEvent>,
+) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    let abort_flag = app.state::<Arc<AtomicBool>>();
+    abort_flag.store(false, Ordering::SeqCst);
+    tokio::task::yield_now().await;
+    abort_flag.store(false, Ordering::SeqCst);
+
+    if on_event.send(ChatStreamEvent::StreamStart).is_err() {
+        return Ok(());
+    }
+
+    let prompt_client = get_opencode_client(&app)?;
+    let session_id_clone = oc_session_id.clone();
+    let content_clone = content;
+
+    let mbti_modifier = app
+        .store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get(STORE_KEY_MBTI_MODIFIER))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty());
+
+    let sse_handle = tokio::spawn({
+        let session_id = oc_session_id;
+        let on_ev = on_event;
+        let flag = abort_flag.inner().clone();
+        async move {
+            client.subscribe_sse(&session_id, &on_ev, &flag).await
+        }
+    });
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    if let Err(e) = prompt_client.prompt_async(&session_id_clone, &content_clone, mbti_modifier.as_deref()).await {
+        abort_flag.store(true, Ordering::SeqCst);
+        return Err(e);
+    }
+
+    sse_handle
+        .await
+        .map_err(|e| format!("SSE task panicked: {}", e))?
+}
+
+#[tauri::command]
+async fn opencode_abort(app: AppHandle, oc_session_id: String) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    app.state::<Arc<AtomicBool>>()
+        .store(true, Ordering::SeqCst);
+    client.abort(&oc_session_id).await
+}
+
+fn get_opencode_client(app: &AppHandle) -> Result<opencode::OpenCodeClient, String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let base_url = store
+        .get("opencode_url")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_URL.to_string());
+    Ok(opencode::OpenCodeClient::new(base_url))
+}
+
+// ── Chat Streaming Command (Standalone) ───────────────────────────
 
 #[tauri::command]
 fn abort_stream(app: AppHandle) {
@@ -772,6 +877,7 @@ pub fn run() {
             send_feedback, abort_stream, ollama_is_installed, ollama_install,
             ollama_check, ollama_models, ollama_toggle, ollama_set_config,
             fetch_claude_usage, set_session_key,
+            opencode_check, opencode_create_session, opencode_send, opencode_abort,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

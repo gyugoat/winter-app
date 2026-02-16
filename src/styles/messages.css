@@ -70,7 +70,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 4px;
+  align-self: flex-start; /* 버블 맨 위 라인에 맞춤 */
+  margin-top: 0;
 }
 
 .message-diamond {
@@ -89,105 +90,170 @@
   inset: 0;
   border-radius: 3px;
   box-shadow: 0 0 0 transparent;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.3s;
+ 
 }
 
 .message-row:hover .message-diamond::after {
   box-shadow: 0 0 16px var(--glow-diamond), 0 0 32px var(--glow-diamond);
 }
 
+
+
+
 /* Bubble */
+/* ─────────────────────────────────────────────
+   1. 기본 말풍선 (Base Bubble) 설정
+   ───────────────────────────────────────────── */
 .message-bubble {
-  padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 14px;
-  line-height: 1.55;
-  word-break: break-word;
+  /* [중요] 텍스트 정렬을 위한 비대칭 패딩 설정 */
+  /* 위(8px)는 좁게, 아래(12px)는 넓게 줘서 텍스트를 시각적으로 위로 올림 */
+  /* 순서: 위 | 오른쪽 | 아래 | 왼쪽 */
+  padding: 8px 14px 12px 14px;
+
+  border-radius: 14px;       /* 말풍선 모서리 둥글게 */
+  font-size: 15px;           /* 글자 크기 (기존 14px에서 15px로 적용됨) */
+  line-height: 1.4;          /* 줄 간격 (너무 넓지 않게 1.4로 고정) */
+  word-break: break-word;    /* 긴 단어(URL 등)가 밖으로 튀어나가지 않게 줄바꿈 */
 }
 
+/* ─────────────────────────────────────────────
+   2. Winter (Assistant) 전용 스타일 - 투명 모드
+   ───────────────────────────────────────────── */
 .message-row.assistant .message-bubble {
-  background: var(--bubble-winter);
-  border-top-left-radius: 4px;
+  background: transparent !important; /* 배경색 제거 (투명) */
+  box-shadow: none !important;        /* 그림자 제거 */
+  border: none !important;            /* 테두리 제거 */
+  
+  /* 위아래 패딩은 0으로 없애고, 왼쪽만 20px 띄워서 아바타와 간격 확보 */
+  padding: 0 0 0 20px !important;   
+min-width: 600px;  
 }
 
+/* Winter 메시지 시간 위치 보정 */
+.message-row.assistant .message-time {
+  padding-left: 18px;    /* 텍스트가 밀린 만큼 시간도 왼쪽에서 밀어줌 */
+  margin-bottom: 1px;    /* 시간 아래쪽에 미세한 여백 */
+}
+
+/* ─────────────────────────────────────────────
+   3. User (사용자) 전용 스타일
+   ───────────────────────────────────────────── */
 .message-row.user .message-bubble {
-  background: var(--bubble-user);
-  border-top-right-radius: 4px;
+  background: var(--bubble-user); /* 사용자 말풍선 색상 */
+  border-top-right-radius: 4px;   /* 말풍선 꼬리 느낌 (오른쪽 위만 뾰족하게) */
 }
 
+/* ─────────────────────────────────────────────
+   4. 메시지 시간 (공통)
+   ───────────────────────────────────────────── */
 .message-time {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  opacity: 0;
-  transition: opacity 0.15s;
+  font-size: 10px;           /* 시간 글자 작게 */
+  color: var(--text-muted);  /* 회색조 색상 */
+  margin-top: 10px;          /* 말풍선과 시간 사이 간격 */
+  opacity: 0;                /* 평소엔 숨김 */
+  transition: opacity .3s; /* 부드럽게 나타나기 */
+will-change: opacity;
+  transform: translateZ(0);
 }
 
+/* ─────────────────────────────────────────────
+   . 메시지 시간 (유저)
+   ───────────────────────────────────────────── */
+
+.message-row.user .message-time {
+  text-align: right;      /* 글자를 오른쪽 끝으로 */
+  align-self: flex-end;   /* 플렉스 박스 안에서도 오른쪽 끝으로 밀기 */
+  padding-right: 4px;     /* 아바타랑 너무 딱 붙지 않게 살짝 여백 */
+  padding-left: 0;        /* 혹시나 왼쪽 여백 있으면 제거 */
+  width: 100%;            /* 전체 너비를 써야 오른쪽 정렬이 먹힘 */
+}
+
+/* 마우스 올렸을 때만 시간 표시 */
 .message-row:hover .message-time {
   opacity: 1;
 }
 
+
+
 /* ── Markdown content ── */
 
+/* ─────────────────────────────────────────────
+   5. 마크다운 내부 콘텐츠 스타일 (Markdown Content)
+   ───────────────────────────────────────────── */
+
+/* 제목 스타일 (Heading) */
 .message-bubble-markdown h1,
 .message-bubble-markdown h2,
 .message-bubble-markdown h3 {
-  margin: 0.6em 0 0.3em;
-  color: var(--text-primary);
+  margin: 0.6em 0 0.3em;       /* 제목 위아래 간격 */
+  color: var(--text-primary);  /* 제목 색상 */
 }
-.message-bubble-markdown h1 { font-size: 1.3em; }
-.message-bubble-markdown h2 { font-size: 1.15em; }
-.message-bubble-markdown h3 { font-size: 1.05em; }
+.message-bubble-markdown h1 { font-size: 1.3em; }  /* H1 크기 */
+.message-bubble-markdown h2 { font-size: 1.15em; } /* H2 크기 */
+.message-bubble-markdown h3 { font-size: 1.05em; } /* H3 크기 */
 
+/* 본문 문단 (Paragraph) */
 .message-bubble-markdown p {
-  margin: 0.4em 0;
-  line-height: 1.6;
+  padding-right: 14px; /* 오른쪽 여백 확보 (글자가 너무 끝에 붙지 않게) */
 }
 
+/* 문단 사이 간격 (엔터 친 효과) */
+.message-bubble-markdown p + p {
+  margin-top: 0.4em;
+}
+
+/* 리스트 스타일 (ul, ol) */
 .message-bubble-markdown ul,
 .message-bubble-markdown ol {
-  margin: 0.4em 0;
-  padding-left: 1.5em;
+  margin: 0.4em 0;      /* 리스트 위아래 간격 */
+  padding-left: 1.5em;  /* 들여쓰기 */
 }
+.message-bubble-markdown li { margin: 0.2em 0; } /* 리스트 항목 간격 */
 
-.message-bubble-markdown li { margin: 0.2em 0; }
-
+/* 링크 스타일 */
 .message-bubble-markdown a {
-  color: var(--accent);
-  text-decoration: none;
+  color: var(--accent);         /* 링크 강조색 */
+  text-decoration: none;        /* 밑줄 제거 */
 }
-.message-bubble-markdown a:hover { text-decoration: underline; }
+.message-bubble-markdown a:hover { text-decoration: underline; } /* 호버 시 밑줄 */
 
+/* 인라인 코드 스타일 (`code`) */
 .message-bubble-markdown code:not(.hljs) {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 0.15em 0.4em;
-  border-radius: 4px;
-  font-size: 0.88em;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  background: rgba(255, 255, 255, 0.08); /* 배경색 (반투명 흰색) */
+  padding: 0.15em 0.4em;                 /* 코드 안쪽 여백 */
+  border-radius: 4px;                    /* 모서리 둥글게 */
+  font-size: 0.88em;                     /* 글자 살짝 작게 */
+  font-family: 'JetBrains Mono', 'Fira Code', monospace; /* 코딩 폰트 */
 }
 
+/* 굵은 글씨 (Bold) */
 .message-bubble-markdown strong {
   font-weight: 600;
   color: var(--text-primary);
 }
 
+/* 기울임꼴 (Italic) */
 .message-bubble-markdown em { font-style: italic; }
 
+/* 인용문 (Blockquote) */
 .message-bubble-markdown blockquote {
   margin: 0.5em 0;
   padding: 0.3em 0.8em;
-  border-left: 3px solid var(--accent-purple);
+  border-left: 3px solid var(--accent-purple); /* 왼쪽 보라색 선 */
   color: var(--text-secondary);
-  background: rgba(139, 92, 246, 0.05);
+  background: rgba(139, 92, 246, 0.05);        /* 연한 보라색 배경 */
   border-radius: 0 4px 4px 0;
 }
 
+/* 구분선 (Horizontal Rule) */
 .message-bubble-markdown hr {
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border); /* 얇은 선 */
   margin: 0.8em 0;
 }
 
+/* 표 (Table) 스타일 */
 .message-bubble-markdown table {
   border-collapse: collapse;
   width: 100%;
@@ -195,14 +261,15 @@
 }
 .message-bubble-markdown th,
 .message-bubble-markdown td {
-  border: 1px solid var(--border);
-  padding: 6px 10px;
+  border: 1px solid var(--border); /* 표 테두리 */
+  padding: 6px 10px;               /* 셀 안쪽 여백 */
   text-align: left;
 }
 .message-bubble-markdown th {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.04); /* 헤더 배경색 */
   font-weight: 600;
 }
+
 
 /* ── Code blocks ── */
 
@@ -282,9 +349,63 @@
 .hljs-operator { color: #56b6c2; }
 .hljs-punctuation { color: var(--text-secondary); }
 
+/* ── Thinking dots & status ── */
+
+.message-status {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: dotPulse 1.4s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotPulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+.status-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.message-inline-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .search-highlight {
   background: var(--search-highlight);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
+}
+
+/* 🚨 강제 마진 정리 (버블 안쪽 위아래 여백을 padding으로만 제어) */
+.message-bubble-markdown > *:first-child {
+  margin-top: 0 !important;
+}
+
+.message-bubble-markdown > *:last-child {
+  margin-bottom: 0 !important;
 }
