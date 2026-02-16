@@ -60,12 +60,39 @@ pub fn get_settings(app: &AppHandle) -> OllamaSettings {
 
 pub async fn is_installed() -> bool {
     if cfg!(target_os = "windows") {
-        Command::new("where")
+        // `where`는 cmd.exe 내장 명령이라 직접 실행 불가 → cmd /C로 감싸야 함
+        let found_in_path = Command::new("cmd")
+            .args(["/C", "where", "ollama"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if found_in_path { return true; }
+
+        // PATH에 없을 수 있으므로 일반적인 설치 경로 직접 체크
+        let home = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let common_paths = [
+            format!("{}\\Programs\\Ollama\\ollama.exe", home),
+            format!("{}\\Ollama\\ollama.exe", home),
+            "C:\\Program Files\\Ollama\\ollama.exe".to_string(),
+            "C:\\Program Files (x86)\\Ollama\\ollama.exe".to_string(),
+        ];
+        common_paths.iter().any(|p| std::path::Path::new(p).exists())
+    } else if cfg!(target_os = "macos") {
+        // which 먼저, 실패하면 .app 번들 경로 체크
+        let found_in_path = Command::new("which")
             .arg("ollama")
             .output()
             .map(|o| o.status.success())
-            .unwrap_or(false)
+            .unwrap_or(false);
+        if found_in_path { return true; }
+
+        let app_paths = [
+            "/Applications/Ollama.app/Contents/Resources/ollama",
+            "/usr/local/bin/ollama",
+        ];
+        app_paths.iter().any(|p| std::path::Path::new(p).exists())
     } else {
+        // Linux: which로 충분
         Command::new("which")
             .arg("ollama")
             .output()
