@@ -389,8 +389,9 @@ export function useChat() {
       setSessions((prev) => {
         const next = prev.filter((s) => s.id !== id);
         if (id === activeSessionId) {
-          if (next.length > 0) {
-            setActiveSessionId(next[0].id);
+          const remaining = next.filter((s) => !s.archived);
+          if (remaining.length > 0) {
+            setActiveSessionId(remaining[0].id);
             setIsDraft(false);
           } else {
             setActiveSessionId(null);

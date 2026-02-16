@@ -79,6 +79,21 @@ export function Readme({ onDone }: ReadmeProps) {
           </section>
 
           <section className="readme-section">
+            <h2 className="readme-section-title">{t('readmeMobileTitle')}</h2>
+            <p className="readme-section-body">{t('readmeMobileBody')}</p>
+          </section>
+
+          <section className="readme-section">
+            <h2 className="readme-section-title">{t('readmeShortcutsTitle')}</h2>
+            <p className="readme-section-body">{t('readmeShortcutsBody')}</p>
+          </section>
+
+          <section className="readme-section">
+            <h2 className="readme-section-title">{t('readmeModelTitle')}</h2>
+            <p className="readme-section-body">{t('readmeModelBody')}</p>
+          </section>
+
+          <section className="readme-section">
             <h2 className="readme-section-title">{t('readmeTips')}</h2>
             <ul className="readme-tips">
               <li>{t('readmeTip1')}</li>

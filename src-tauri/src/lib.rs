@@ -624,42 +624,43 @@ struct ClaudeUsage {
 }
 
 #[tauri::command]
-async fn fetch_claude_usage(app: AppHandle) -> Result<ClaudeUsage, String> {
-    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
-    let session_key = store.get("claude_session_key")
-        .and_then(|v| v.as_str().map(|s| s.to_string()))
-        .ok_or_else(|| "No session key. Set it in Settings → Token → Connect.".to_string())?;
+async fn fetch_claude_usage(_app: AppHandle) -> Result<ClaudeUsage, String> {
+    let home = std::env::var("HOME")
+        .map_err(|_| "Cannot find HOME directory".to_string())?;
+    let auth_path = std::path::PathBuf::from(home)
+        .join(".openclaw-winter/data/opencode/auth.json");
+
+    let auth_content = std::fs::read_to_string(&auth_path)
+        .map_err(|e| format!("Cannot read auth.json: {}", e))?;
+    let auth: Value = serde_json::from_str(&auth_content)
+        .map_err(|e| format!("Cannot parse auth.json: {}", e))?;
+    let access_token = auth.get("anthropic")
+        .and_then(|a| a.get("access"))
+        .and_then(|a| a.as_str())
+        .ok_or_else(|| "No access token in auth.json".to_string())?;
 
     let client = Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| format!("HTTP client error: {}", e))?;
 
-    #[derive(Deserialize)]
-    struct Org { uuid: String }
-
-    let orgs: Vec<Org> = client
-        .get("https://claude.ai/api/organizations")
-        .header("cookie", format!("sessionKey={}", session_key))
-        .header("accept", "application/json")
-        .send().await.map_err(|e| format!("Orgs request failed: {}", e))?
-        .json().await.map_err(|e| format!("Orgs parse failed: {}", e))?;
-
-    let org_id = orgs.first().map(|o| o.uuid.clone())
-        .ok_or_else(|| "No organization found.".to_string())?;
-
-    let usage_url = format!("https://claude.ai/api/organizations/{}/usage", org_id);
     let body: Value = client
-        .get(&usage_url)
-        .header("cookie", format!("sessionKey={}", session_key))
+        .get("https://api.anthropic.com/api/oauth/usage")
+        .header("authorization", format!("Bearer {}", access_token))
+        .header("user-agent", "openclaw")
         .header("accept", "application/json")
+        .header("anthropic-version", "2023-06-01")
+        .header("anthropic-beta", "oauth-2025-04-20")
         .send().await.map_err(|e| format!("Usage request failed: {}", e))?
         .json().await.map_err(|e| format!("Usage parse failed: {}", e))?;
 
     let parse_limit = |key: &str| -> Option<UsageLimit> {
-        body.get(key).map(|v| UsageLimit {
-            utilization: v.get("utilization").and_then(|u| u.as_f64()),
-            resets_at: v.get("resets_at").and_then(|r| r.as_str().map(|s| s.to_string())),
+        body.get(key).and_then(|v| {
+            if v.is_null() { return None; }
+            Some(UsageLimit {
+                utilization: v.get("utilization").and_then(|u| u.as_f64()),
+                resets_at: v.get("resets_at").and_then(|r| r.as_str().map(|s| s.to_string())),
+            })
         })
     };
 
@@ -699,8 +700,13 @@ async fn opencode_check(app: AppHandle) -> Result<bool, String> {
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| DEFAULT_OPENCODE_URL.to_string());
+    let directory = store
+        .get("opencode_directory")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string());
 
-    let client = opencode::OpenCodeClient::new(base_url);
+    let client = opencode::OpenCodeClient::new(base_url, directory);
     Ok(client.health_check().await)
 }
 
@@ -768,6 +774,8 @@ async fn opencode_abort(app: AppHandle, oc_session_id: String) -> Result<(), Str
     client.abort(&oc_session_id).await
 }
 
+const DEFAULT_OPENCODE_DIR: &str = "/home/gyugo/.openclaw-winter/workspace";
+
 fn get_opencode_client(app: &AppHandle) -> Result<opencode::OpenCodeClient, String> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
     let base_url = store
@@ -775,7 +783,12 @@ fn get_opencode_client(app: &AppHandle) -> Result<opencode::OpenCodeClient, Stri
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| DEFAULT_OPENCODE_URL.to_string());
-    Ok(opencode::OpenCodeClient::new(base_url))
+    let directory = store
+        .get("opencode_directory")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string());
+    Ok(opencode::OpenCodeClient::new(base_url, directory))
 }
 
 // ── Chat Streaming Command (Standalone) ───────────────────────────

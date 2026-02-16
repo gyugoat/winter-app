@@ -131,6 +131,22 @@ export const en = {
   modelOpus: 'Opus',
   modelSonnet: 'Sonnet',
   modelHaiku: 'Haiku',
+  mobileLink: 'Mobile Link',
+  mobileLinkSubtitle: 'Connect your phone to Winter',
+  mobileLinkQrHint: 'Scan with your phone camera',
+  mobileLinkHowTo: 'How to link',
+  mobileLinkHowToStep1: '1. Install Tailscale on your computer and phone',
+  mobileLinkHowToStep2: '2. Sign in with the same account on both devices',
+  mobileLinkHowToStep3: '3. Both devices will get a 100.x.x.x address',
+  mobileLinkHowToStep4: '4. Scan the QR code above or type the URL in your phone\u2019s browser',
+  mobileLinkHowToNote: 'Tailscale creates a private network between your devices \u2014 no port forwarding needed.',
+  mobileLinkGetTailscale: 'Get Tailscale \u2192',
+  readmeMobileTitle: 'Mobile Access',
+  readmeMobileBody: 'Winter works on your phone too. Go to Settings \u2192 Personalize \u2192 Mobile Link to scan a QR code and connect from your phone\u2019s browser. Requires Tailscale on both devices.',
+  readmeShortcutsTitle: 'Keyboard Shortcuts',
+  readmeShortcutsBody: 'Ctrl+N for new session, Ctrl+F to search, Ctrl+[ / ] to switch sessions, Ctrl+K to attach files, Esc to stop a response. Check Settings \u2192 Shortcuts for the full list.',
+  readmeModelTitle: 'Pick Your Model',
+  readmeModelBody: 'Go to Settings \u2192 Personalize to switch between Opus (smartest), Sonnet (balanced), and Haiku (fastest). Opus is default.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

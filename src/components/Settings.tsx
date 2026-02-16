@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import QRCode from 'qrcode';
 import type { SettingsPageId } from './Chat';
 import type { Session } from '../types';
 import { Diamond } from './Diamond';
@@ -59,6 +61,109 @@ function ShortcutsContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLEleme
           <span className="settings-shortcut-keys">{shortcut.keys}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+const MOBILE_LINK_URL = 'http://100.72.94.73:8890/winter-mobile.html';
+
+function MobileLinkCard({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [howToOpen, setHowToOpen] = useState(false);
+
+  const generateQr = useCallback(async () => {
+    try {
+      const url = await QRCode.toDataURL(MOBILE_LINK_URL, {
+        width: 200,
+        margin: 2,
+        color: { dark: '#e5e5e5', light: '#13111f' },
+      });
+      setQrDataUrl(url);
+    } catch {}
+  }, []);
+
+  const handleToggle = (e: React.MouseEvent<HTMLElement>) => {
+    onFlash(e);
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !qrDataUrl) generateQr();
+  };
+
+  const handleCopy = async (e: React.MouseEvent<HTMLElement>) => {
+    onFlash(e);
+    try {
+      await navigator.clipboard.writeText(MOBILE_LINK_URL);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+
+  return (
+    <div className="settings-card settings-mobile-link-card">
+      <button className="settings-mobile-link-header" onClick={handleToggle}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="5" y="2" width="14" height="20" rx="3" />
+          <line x1="12" y1="18" x2="12" y2="18.01" />
+        </svg>
+        <span className="settings-card-title">{t('mobileLink')}</span>
+        <span className={`settings-mobile-link-chevron${expanded ? ' open' : ''}`}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </span>
+      </button>
+      {expanded && (
+        <div className="settings-mobile-link-body">
+          <span className="settings-card-subtitle">{t('mobileLinkSubtitle')}</span>
+          <div className="settings-mobile-link-url-row">
+            <input
+              className="settings-mobile-link-url"
+              value={MOBILE_LINK_URL}
+              readOnly
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <button className="settings-mobile-link-copy" onClick={handleCopy}>
+              {copied ? t('copied') : t('copy')}
+            </button>
+          </div>
+          {qrDataUrl && (
+            <div className="settings-mobile-link-qr">
+              <img src={qrDataUrl} alt="QR" width={160} height={160} />
+              <span className="settings-mobile-link-qr-hint-light">{t('mobileLinkQrHint')}</span>
+            </div>
+          )}
+          <button
+            className="settings-mobile-link-howto-toggle"
+            onClick={(e) => { onFlash(e); setHowToOpen(!howToOpen); }}
+          >
+            {t('mobileLinkHowTo')}
+            <span className={`settings-mobile-link-howto-chevron${howToOpen ? ' open' : ''}`}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+          </button>
+          {howToOpen && (
+            <div className="settings-mobile-link-howto-body">
+              <p className="settings-mobile-link-howto-step">{t('mobileLinkHowToStep1')}</p>
+              <p className="settings-mobile-link-howto-step">{t('mobileLinkHowToStep2')}</p>
+              <p className="settings-mobile-link-howto-step">{t('mobileLinkHowToStep3')}</p>
+              <p className="settings-mobile-link-howto-step">{t('mobileLinkHowToStep4')}</p>
+              <p className="settings-mobile-link-howto-note">{t('mobileLinkHowToNote')}</p>
+              <a
+                className="settings-mobile-link-howto-cta"
+                href="#"
+                onClick={(e) => { e.preventDefault(); openUrl('https://tailscale.com/download'); }}
+              >
+                {t('mobileLinkGetTailscale')}
+              </a>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -147,10 +252,7 @@ function PersonalizeContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLEle
           ))}
         </div>
       </div>
-      <button className="settings-card" onClick={onFlash}>
-        <span className="settings-card-title">{t('personalizeApps')}</span>
-        <span className="settings-card-subtitle">{t('personalizeAppsSubtitle')}</span>
-      </button>
+      <MobileLinkCard onFlash={onFlash} />
       <button className="settings-card" onClick={onFlash}>
         <span className="settings-card-title settings-card-title-italic">{t('personalizeAutomation')}</span>
         <span className="settings-card-subtitle">{t('personalizeAutomationSubtitle')}</span>

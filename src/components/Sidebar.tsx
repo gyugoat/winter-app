@@ -376,15 +376,6 @@ export function Sidebar({
                 </button>
                 {subPopup === 'token' && (
                   <div className="settings-sub-popup" role="menu" aria-label={t('ariaToken')}>
-                    <div className="settings-sub-popup-item" role="menuitem">
-                      <span>{t('tokenSession')}</span>
-                      <span className="settings-sub-popup-stat">{(usage.input + usage.output).toLocaleString()}</span>
-                    </div>
-                    <div className="settings-sub-popup-item" role="menuitem">
-                      <span>{t('tokenWeekly')}</span>
-                      <span className="settings-sub-popup-stat">{(weeklyUsage.input + weeklyUsage.output).toLocaleString()}</span>
-                    </div>
-                    <div className="settings-sub-popup-divider" />
                     {claudeUsageLoading ? (
                       <div className="settings-sub-popup-item" role="menuitem">
                         <span>{t('tokenUsageLoading')}</span>
@@ -396,30 +387,18 @@ export function Sidebar({
                       </div>
                     ) : claudeUsage ? (
                       <>
-                        {claudeUsage.five_hour && (
-                          <div className="settings-sub-popup-item" role="menuitem">
-                            <span>{t('tokenUsage5h')}</span>
-                            <span className="settings-sub-popup-stat">
-                              {claudeUsage.five_hour.utilization != null ? `${Math.round(claudeUsage.five_hour.utilization * 100)}%` : t('tokenUsageNone')}
-                            </span>
-                          </div>
-                        )}
-                        {claudeUsage.seven_day && (
-                          <div className="settings-sub-popup-item" role="menuitem">
-                            <span>{t('tokenUsage7d')}</span>
-                            <span className="settings-sub-popup-stat">
-                              {claudeUsage.seven_day.utilization != null ? `${Math.round(claudeUsage.seven_day.utilization * 100)}%` : t('tokenUsageNone')}
-                            </span>
-                          </div>
-                        )}
-                        {claudeUsage.seven_day_opus && (
-                          <div className="settings-sub-popup-item" role="menuitem">
-                            <span>{t('tokenUsageOpus')}</span>
-                            <span className="settings-sub-popup-stat">
-                              {claudeUsage.seven_day_opus.utilization != null ? `${Math.round(claudeUsage.seven_day_opus.utilization * 100)}%` : t('tokenUsageNone')}
-                            </span>
-                          </div>
-                        )}
+                        <div className="settings-sub-popup-item" role="menuitem">
+                          <span>{t('tokenSession')}</span>
+                          <span className="settings-sub-popup-stat">
+                            {claudeUsage.five_hour?.utilization != null ? `${Math.round(claudeUsage.five_hour.utilization)}%` : '—'}
+                          </span>
+                        </div>
+                        <div className="settings-sub-popup-item" role="menuitem">
+                          <span>{t('tokenWeekly')}</span>
+                          <span className="settings-sub-popup-stat">
+                            {claudeUsage.seven_day?.utilization != null ? `${Math.round(claudeUsage.seven_day.utilization)}%` : '—'}
+                          </span>
+                        </div>
                       </>
                     ) : (
                       <div className="settings-sub-popup-item" role="menuitem">

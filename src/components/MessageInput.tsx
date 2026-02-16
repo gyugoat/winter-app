@@ -46,6 +46,13 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
     }
   }, [onFocusReady]);
 
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }, [text]);
+
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if ((!trimmed && attachedImages.length === 0) || disabled) return;
