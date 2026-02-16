@@ -7,6 +7,7 @@ import { MessageInput } from './MessageInput';
 import { SnowBackground } from './SnowBackground';
 import { SettingsPage } from './Settings';
 import { Diamond } from './Diamond';
+import { useClickFlash } from '../hooks/useClickFlash';
 import { useChat } from '../hooks/useChat';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useI18n } from '../i18n';
@@ -25,6 +26,7 @@ const TOAST_VISIBLE_MS = 1100;
 const TOAST_DROP_MS = 400;
 
 export function Chat({ onReauth, onShowReadme }: ChatProps) {
+  const onFlash = useClickFlash();
   const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
@@ -144,6 +146,8 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   const handleSwitchSession = (id: string) => {
     switchSession(id);
     setSettingsPage(null);
+    setSearchOpen(false);
+    setSearchQuery('');
   };
 
   return (
@@ -202,7 +206,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
               onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); } }}
             />
-            <button className="chat-search-close" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}>
+            <button className="chat-search-close" onClick={(e) => { onFlash(e); setSearchOpen(false); setSearchQuery(''); }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />

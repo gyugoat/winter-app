@@ -15,7 +15,10 @@ interface MessageInputProps {
   onFocusReady?: (fn: () => void) => void;
 }
 
-function fileToBase64(file: File): Promise<ImageAttachment> {
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+function fileToBase64(file: File): Promise<ImageAttachment | null> {
+  if (file.size > MAX_IMAGE_SIZE) return Promise.resolve(null);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -84,8 +87,11 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
   const processFiles = useCallback(async (files: FileList | File[]) => {
     const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (imageFiles.length === 0) return;
-    const newImages = await Promise.all(imageFiles.map(fileToBase64));
-    setAttachedImages((prev) => [...prev, ...newImages]);
+    const results = await Promise.all(imageFiles.map(fileToBase64));
+    const newImages = results.filter((r): r is ImageAttachment => r !== null);
+    if (newImages.length > 0) {
+      setAttachedImages((prev) => [...prev, ...newImages]);
+    }
   }, []);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -134,7 +140,7 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
             {attachedImages.map((img, i) => (
               <div key={i} className="input-image-thumb">
                 <img src={`data:${img.mediaType};base64,${img.data}`} alt="" />
-                <button className="input-image-remove" onClick={() => removeImage(i)}>
+                <button className="input-image-remove" onClick={(e) => { onFlash(e); removeImage(i); }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />

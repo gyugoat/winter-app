@@ -283,7 +283,7 @@
 .hljs-punctuation { color: var(--text-secondary); }
 
 .search-highlight {
-  background: rgba(250, 204, 21, 0.3);
+  background: var(--search-highlight);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;

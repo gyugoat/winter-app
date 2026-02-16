@@ -133,11 +133,11 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
+  background: var(--overlay-bg);
+  color: var(--text-on-accent);
   transition: background 0.15s;
 }
 
 .input-image-remove:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--bg-active);
 }
