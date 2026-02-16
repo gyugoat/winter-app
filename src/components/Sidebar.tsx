@@ -18,6 +18,7 @@ interface SidebarProps {
   onRenameSession: (id: string, name: string) => void;
   onSelectSettingsPage: (page: SettingsPageId) => void;
   onReauth: () => void;
+  onShowReadme: () => void;
 }
 
 /* ── SVG Icons for settings menu ─────────────────── */
@@ -79,6 +80,12 @@ const MENU_ICONS = {
       <circle cx="12" cy="7" r="4" />
     </svg>
   ),
+  howToUse: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </svg>
+  ),
   check: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 6 9 17 4 12" />
@@ -106,6 +113,7 @@ export function Sidebar({
   onRenameSession,
   onSelectSettingsPage,
   onReauth,
+  onShowReadme,
 }: SidebarProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
@@ -186,7 +194,7 @@ export function Sidebar({
           <button
             className="sidebar-toggle-btn"
             onClick={(e) => { onFlash(e); onToggle(); }}
-            aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label={open ? t('ariaCollapseSidebar') : t('ariaExpandSidebar')}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="3" y1="6" x2="21" y2="6" />
@@ -197,7 +205,7 @@ export function Sidebar({
           <button
             className="sidebar-new-icon-btn"
             onClick={(e) => { onFlash(e); onNewSession(); }}
-            aria-label="New session"
+            aria-label={t('ariaNewSession')}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -207,7 +215,7 @@ export function Sidebar({
           <button
             className="sidebar-gear-icon-btn"
             onClick={handleGearClick}
-            aria-label="Settings"
+            aria-label={t('ariaSettings')}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -277,50 +285,14 @@ export function Sidebar({
         <div className="sidebar-footer" ref={settingsMenuRef}>
           {/* Settings Popup Menu (Tier 1) */}
           {settingsMenuOpen && (
-            <div className="settings-popup" role="menu" aria-label="Settings menu">
-              {/* Theme — has right sub-popup */}
-              <div className="settings-popup-item-wrap">
-                <button
-                  className={`settings-popup-item${subPopup === 'theme' ? ' active' : ''}`}
-                  onClick={(e) => { onFlash(e); setSubPopup(subPopup === 'theme' ? null : 'theme'); }}
-                  role="menuitem"
-                >
-                  <span className="settings-popup-icon">{MENU_ICONS.theme}</span>
-                  <span className="settings-popup-label">{t('theme')}</span>
-                  <span className="settings-popup-arrow">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </span>
-                </button>
-                {subPopup === 'theme' && (
-                  <div className="settings-sub-popup" role="menu" aria-label="Theme options">
-                    {THEME_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        className={`settings-sub-popup-item${mode === opt.value ? ' active' : ''}`}
-                        onClick={(e) => { onFlash(e); setMode(opt.value); }}
-                        role="menuitemradio"
-                        aria-checked={mode === opt.value}
-                      >
-                        <span>{t(opt.labelKey)}</span>
-                        {mode === opt.value && (
-                          <span className="settings-sub-popup-check">{MENU_ICONS.check}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Shortcuts — opens sub-page */}
+            <div className="settings-popup" role="menu" aria-label={t('ariaSettingsMenu')}>
               <button
                 className="settings-popup-item"
-                onClick={(e) => { onFlash(e); handleSubPage('shortcuts'); }}
+                onClick={(e) => { onFlash(e); handleSubPage('personalize'); }}
                 role="menuitem"
               >
-                <span className="settings-popup-icon">{MENU_ICONS.shortcuts}</span>
-                <span className="settings-popup-label">{t('shortcuts')}</span>
+                <span className="settings-popup-icon">{MENU_ICONS.personalize}</span>
+                <span className="settings-popup-label">{t('personalize')}</span>
                 <span className="settings-popup-chevron">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
@@ -343,7 +315,7 @@ export function Sidebar({
                   </span>
                 </button>
                 {subPopup === 'token' && (
-                  <div className="settings-sub-popup" role="menu" aria-label="Token">
+                  <div className="settings-sub-popup" role="menu" aria-label={t('ariaToken')}>
                     <div className="settings-sub-popup-item" role="menuitem">
                       <span>{t('tokenSession')}</span>
                       <span className="settings-sub-popup-stat">0</span>
@@ -368,7 +340,54 @@ export function Sidebar({
                 )}
               </div>
 
-              {/* Language — opens sub-page */}
+              <button
+                className="settings-popup-item"
+                onClick={(e) => { onFlash(e); handleSubPage('shortcuts'); }}
+                role="menuitem"
+              >
+                <span className="settings-popup-icon">{MENU_ICONS.shortcuts}</span>
+                <span className="settings-popup-label">{t('shortcuts')}</span>
+                <span className="settings-popup-chevron">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
+              </button>
+
+              <div className="settings-popup-item-wrap">
+                <button
+                  className={`settings-popup-item${subPopup === 'theme' ? ' active' : ''}`}
+                  onClick={(e) => { onFlash(e); setSubPopup(subPopup === 'theme' ? null : 'theme'); }}
+                  role="menuitem"
+                >
+                  <span className="settings-popup-icon">{MENU_ICONS.theme}</span>
+                  <span className="settings-popup-label">{t('theme')}</span>
+                  <span className="settings-popup-arrow">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </span>
+                </button>
+                {subPopup === 'theme' && (
+                  <div className="settings-sub-popup" role="menu" aria-label={t('ariaThemeOptions')}>
+                    {THEME_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        className={`settings-sub-popup-item${mode === opt.value ? ' active' : ''}`}
+                        onClick={(e) => { onFlash(e); setMode(opt.value); }}
+                        role="menuitemradio"
+                        aria-checked={mode === opt.value}
+                      >
+                        <span>{t(opt.labelKey)}</span>
+                        {mode === opt.value && (
+                          <span className="settings-sub-popup-check">{MENU_ICONS.check}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <button
                 className="settings-popup-item"
                 onClick={(e) => { onFlash(e); handleSubPage('language'); }}
@@ -383,22 +402,6 @@ export function Sidebar({
                 </span>
               </button>
 
-              {/* Send feedback — opens sub-page */}
-              <button
-                className="settings-popup-item"
-                onClick={(e) => { onFlash(e); handleSubPage('feedback'); }}
-                role="menuitem"
-              >
-                <span className="settings-popup-icon">{MENU_ICONS.feedback}</span>
-                <span className="settings-popup-label">{t('sendFeedback')}</span>
-                <span className="settings-popup-chevron">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </span>
-              </button>
-
-              {/* Archive — placeholder */}
               <button
                 className="settings-popup-item"
                 onClick={(e) => { onFlash(e); handleSubPage('archive'); }}
@@ -413,14 +416,32 @@ export function Sidebar({
                 </span>
               </button>
 
-              {/* Personalize — opens sub-page */}
               <button
                 className="settings-popup-item"
-                onClick={(e) => { onFlash(e); handleSubPage('personalize'); }}
+                onClick={(e) => {
+                  onFlash(e);
+                  setSettingsMenuOpen(false);
+                  setSubPopup(null);
+                  onShowReadme();
+                }}
                 role="menuitem"
               >
-                <span className="settings-popup-icon">{MENU_ICONS.personalize}</span>
-                <span className="settings-popup-label">{t('personalize')}</span>
+                <span className="settings-popup-icon">{MENU_ICONS.howToUse}</span>
+                <span className="settings-popup-label">{t('howToUse')}</span>
+                <span className="settings-popup-chevron">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
+              </button>
+
+              <button
+                className="settings-popup-item"
+                onClick={(e) => { onFlash(e); handleSubPage('feedback'); }}
+                role="menuitem"
+              >
+                <span className="settings-popup-icon">{MENU_ICONS.feedback}</span>
+                <span className="settings-popup-label">{t('sendFeedback')}</span>
                 <span className="settings-popup-chevron">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />

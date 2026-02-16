@@ -229,7 +229,8 @@ export function useChat() {
 
       if (isDraft) {
         sessionCounter.current += 1;
-        const newSession = createSession(`Session ${sessionCounter.current}`);
+        const sessionName = text.length > 25 ? text.slice(0, 25).trim() + '...' : text;
+        const newSession = createSession(sessionName);
         newSession.messages = [userMsg];
         setSessions((prev) => [...prev, newSession]);
         setActiveSessionId(newSession.id);
@@ -294,8 +295,18 @@ export function useChat() {
   const archiveSession = useCallback(
     (id: string) => {
       updateSession(id, (s) => ({ ...s, archived: true }));
+      if (id === activeSessionId) {
+        const remaining = sessions.filter((s) => s.id !== id && !s.archived);
+        if (remaining.length > 0) {
+          setActiveSessionId(remaining[0].id);
+          setIsDraft(false);
+        } else {
+          setActiveSessionId(null);
+          setIsDraft(true);
+        }
+      }
     },
-    [updateSession]
+    [updateSession, activeSessionId, sessions]
   );
 
   const activeSessions = sessions.filter((s) => !s.archived);

@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useI18n } from '../i18n';
+import type { TranslationKey } from '../i18n/en';
 import '../styles/splash.css';
 
-const FIRST_GREETINGS = ['반가워'];
-const RETURN_GREETINGS = ['어서와!', '다시 왔네', '보고 싶었어', '또 만났네', '여기 있었어'];
-
-function pickGreeting(returning: boolean): string {
-  const pool = returning ? RETURN_GREETINGS : FIRST_GREETINGS;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
+const RETURN_GREETING_KEYS: TranslationKey[] = [
+  'splashReturn1', 'splashReturn2', 'splashReturn3', 'splashReturn4', 'splashReturn5',
+];
 
 interface SplashProps {
   onDone: () => void;
@@ -15,12 +13,17 @@ interface SplashProps {
 }
 
 export function Splash({ onDone, returning = false }: SplashProps) {
+  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [fadeOut, setFadeOut] = useState(false);
   const [showGreeting, setShowGreeting] = useState(false);
   const clickedRef = useRef(false);
   const clickTimeRef = useRef(0);
-  const greetingRef = useRef(pickGreeting(returning));
+  const greetingKeyRef = useRef(
+    returning
+      ? RETURN_GREETING_KEYS[Math.floor(Math.random() * RETURN_GREETING_KEYS.length)]
+      : 'splashFirstGreeting' as TranslationKey
+  );
 
   const handleClick = useCallback(() => {
     if (!clickedRef.current) {
@@ -225,7 +228,7 @@ export function Splash({ onDone, returning = false }: SplashProps) {
       <div className={`splash-diamond${showGreeting ? ' shrink' : ''}`} />
       <span className={`splash-title${showGreeting ? ' hide' : ''}`}>Winter</span>
       <span className={`splash-greeting${showGreeting ? ' visible' : ''}`}>
-        {greetingRef.current}
+        {t(greetingKeyRef.current)}
       </span>
     </div>
   );

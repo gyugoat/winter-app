@@ -77,3 +77,28 @@
 .chat-brand.dimmed:hover {
   opacity: 0.5;
 }
+
+/* ── Toast (inline next to brand) ── */
+
+.chat-toast {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 8px;
+  opacity: 1;
+  animation: toastIn 0.2s ease-out;
+}
+
+.chat-toast.dropping {
+  animation: toastDropAway 0.4s ease-in forwards;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toastDropAway {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(8px); }
+}

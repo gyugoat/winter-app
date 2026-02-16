@@ -11,6 +11,7 @@ interface ShortcutActions {
   onDeleteSession: () => void;
   onAttachFile: () => void;
   onStopStreaming: () => void;
+  onFocusInput: () => void;
   isStreaming: boolean;
   sessions: { id: string }[];
   activeSessionId: string;
@@ -65,6 +66,12 @@ export function useShortcuts(actions: ShortcutActions) {
       }
 
       if (!ctrl) return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        actions.onFocusInput();
+        return;
+      }
 
       switch (e.key.toLowerCase()) {
         case 'n':

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { useI18n } from '../i18n';
 import '../styles/input.css';
@@ -11,15 +11,22 @@ interface MessageInputProps {
   onHistoryUp?: () => string | null;
   onHistoryDown?: () => string | null;
   fileInputRef?: React.RefObject<HTMLInputElement | null>;
+  onFocusReady?: (fn: () => void) => void;
 }
 
-export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryUp, onHistoryDown, fileInputRef: externalFileRef }: MessageInputProps) {
+export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryUp, onHistoryDown, fileInputRef: externalFileRef, onFocusReady }: MessageInputProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const internalFileRef = useRef<HTMLInputElement>(null);
   const fileInputRef = externalFileRef ?? internalFileRef;
+
+  useEffect(() => {
+    if (onFocusReady) {
+      onFocusReady(() => textareaRef.current?.focus());
+    }
+  }, [onFocusReady]);
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();

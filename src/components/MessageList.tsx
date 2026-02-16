@@ -88,13 +88,25 @@ export function MessageList({ messages }: MessageListProps) {
       const encoded = btn.getAttribute('data-code');
       if (!encoded) return;
       navigator.clipboard.writeText(decodeURIComponent(encoded)).then(() => {
-        btn.textContent = 'Copied!';
-        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+        btn.textContent = t('copied');
+        btn.setAttribute('data-state', 'copied');
+        setTimeout(() => {
+          btn.textContent = t('copy');
+          btn.removeAttribute('data-state');
+        }, 2000);
       });
     };
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
-  }, []);
+  }, [t]);
+
+  useEffect(() => {
+    document.querySelectorAll('.code-copy-btn').forEach((btn) => {
+      if (btn.getAttribute('data-state') !== 'copied') {
+        btn.textContent = t('copy');
+      }
+    });
+  }, [t]);
 
   const renderedMessages = useMemo(
     () =>

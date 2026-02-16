@@ -27,6 +27,7 @@ const SUPPORTED_LANGUAGES: { locale: Locale; code: string; name: string }[] = [
 const SHORTCUT_KEYS = [
   { labelKey: 'shortcutNewSession' as const, keys: 'Ctrl + N' },
   { labelKey: 'shortcutArchive' as const, keys: 'Ctrl + Q' },
+  { labelKey: 'shortcutFocusChat' as const, keys: 'Ctrl + Enter' },
   { labelKey: 'shortcutPrevSession' as const, keys: 'Ctrl + [' },
   { labelKey: 'shortcutNextSession' as const, keys: 'Ctrl + ]' },
   { labelKey: 'shortcutDeleteSession' as const, keys: 'Ctrl + ⌫' },
@@ -166,6 +167,35 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
   const [feedbackText, setFeedbackText] = useState('');
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle');
+  const [smtpPass, setSmtpPass] = useState('');
+  const [smtpLoaded, setSmtpLoaded] = useState(false);
+  const [smtpSaved, setSmtpSaved] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const store = await load('settings.json');
+        const saved = await store.get<string>('smtp_app_password');
+        if (saved && typeof saved === 'string') setSmtpPass(saved);
+      } catch {}
+      setSmtpLoaded(true);
+    })();
+  }, []);
+
+  const saveSmtpPass = async (value: string) => {
+    setSmtpPass(value);
+    setSmtpSaved(false);
+    try {
+      const store = await load('settings.json');
+      await store.set('smtp_app_password', value);
+      await store.save();
+      if (value.trim()) {
+        setSmtpSaved(true);
+        setTimeout(() => setSmtpSaved(false), 2000);
+      }
+    } catch {}
+  };
 
   const handleSend = async (e: React.MouseEvent<HTMLElement>) => {
     onFlash(e);
@@ -182,8 +212,43 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
     setSending(false);
   };
 
+  const hasSmtp = smtpPass.trim().length > 0;
+
   return (
     <div className="settings-feedback">
+      <div className="settings-smtp-row">
+        <label className="settings-smtp-label">{t('smtpPassword')}</label>
+        <div className="settings-smtp-input-wrap">
+          <input
+            className="settings-smtp-input"
+            type={showPass ? 'text' : 'password'}
+            value={smtpLoaded ? smtpPass : ''}
+            placeholder={t('smtpPasswordPlaceholder')}
+            onChange={(e) => saveSmtpPass(e.target.value)}
+          />
+          <button
+            className="settings-smtp-toggle"
+            onClick={(e) => { onFlash(e); setShowPass(!showPass); }}
+          >
+            {showPass ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            )}
+          </button>
+        </div>
+        {smtpSaved && <span className="settings-feedback-status sent">{t('smtpSaved')}</span>}
+      </div>
+      {!hasSmtp && (
+        <span className="settings-smtp-hint">{t('smtpRequired')}</span>
+      )}
       <textarea
         className="settings-textarea"
         placeholder={t('feedbackPlaceholder')}
@@ -196,7 +261,7 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
         <button
           className="settings-send-btn"
           onClick={handleSend}
-          disabled={sending || !feedbackText.trim()}
+          disabled={sending || !feedbackText.trim() || !hasSmtp}
         >
           {sending ? t('feedbackSending') : t('feedbackSend')}
         </button>

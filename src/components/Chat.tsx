@@ -9,22 +9,31 @@ import { SettingsPage } from './Settings';
 import { Diamond } from './Diamond';
 import { useChat } from '../hooks/useChat';
 import { useShortcuts } from '../hooks/useShortcuts';
+import { useI18n } from '../i18n';
+import type { TranslationKey } from '../i18n';
 import '../styles/chat.css';
 
 export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive';
 
 interface ChatProps {
   onReauth?: () => void;
+  onShowReadme?: () => void;
 }
 
 const DIAMOND_ANIM_DURATION = 10_000;
+const TOAST_VISIBLE_MS = 1100;
+const TOAST_DROP_MS = 400;
 
-export function Chat({ onReauth }: ChatProps) {
+export function Chat({ onReauth, onShowReadme }: ChatProps) {
+  const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
   const [diamondGlow, setDiamondGlow] = useState(false);
+  const [toast, setToast] = useState<{ text: string; dropping: boolean } | null>(null);
   const glowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevSettingsRef = useRef<SettingsPageId | null>(null);
+  const inputFocusRef = useRef<() => void>(() => {});
   const {
     sessions,
     archivedSessions,
@@ -41,9 +50,23 @@ export function Chat({ onReauth }: ChatProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const showToast = useCallback((key: TranslationKey) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ text: t(key), dropping: false });
+    toastTimerRef.current = setTimeout(() => {
+      setToast((prev) => prev ? { ...prev, dropping: true } : null);
+      toastTimerRef.current = setTimeout(() => setToast(null), TOAST_DROP_MS);
+    }, TOAST_VISIBLE_MS);
+  }, [t]);
+
   const shortcutActions = useMemo(() => ({
-    onNewSession: () => { addSession(); setSettingsPage(null); },
-    onArchiveSession: () => { if (activeSessionId !== '__draft__') archiveSession(activeSessionId); },
+    onNewSession: () => { addSession(); setSettingsPage(null); showToast('toastNewSession'); },
+    onArchiveSession: () => {
+      if (activeSessionId !== '__draft__') {
+        archiveSession(activeSessionId);
+        showToast('toastArchived');
+      }
+    },
     onPrevSession: () => {
       const idx = sessions.findIndex((s) => s.id === activeSessionId);
       if (idx > 0) switchSession(sessions[idx - 1].id);
@@ -53,14 +76,18 @@ export function Chat({ onReauth }: ChatProps) {
       if (idx >= 0 && idx < sessions.length - 1) switchSession(sessions[idx + 1].id);
     },
     onDeleteSession: () => {
-      if (activeSessionId !== '__draft__') deleteSession(activeSessionId);
+      if (activeSessionId !== '__draft__') {
+        deleteSession(activeSessionId);
+        showToast('toastDeleted');
+      }
     },
     onAttachFile: () => fileInputRef.current?.click(),
     onStopStreaming: () => { invoke('abort_stream').catch(() => {}); },
+    onFocusInput: () => inputFocusRef.current(),
     isStreaming,
     sessions,
     activeSessionId,
-  }), [addSession, sessions, activeSessionId, switchSession, deleteSession, archiveSession, isStreaming]);
+  }), [addSession, sessions, activeSessionId, switchSession, deleteSession, archiveSession, isStreaming, showToast]);
 
   const { addToHistory, getPreviousSent, getNextSent, resetHistoryIndex } = useShortcuts(shortcutActions);
 
@@ -105,13 +132,14 @@ export function Chat({ onReauth }: ChatProps) {
           onToggle={() => setSidebarOpen(!sidebarOpen)}
           sessions={sessions}
           activeSessionId={activeSessionId}
-          onNewSession={() => { addSession(); setSettingsPage(null); triggerDiamondGlow(); }}
+          onNewSession={() => { addSession(); setSettingsPage(null); triggerDiamondGlow(); showToast('toastNewSession'); }}
           onSwitchSession={handleSwitchSession}
-          onDeleteSession={deleteSession}
-          onArchiveSession={archiveSession}
+          onDeleteSession={(id) => { deleteSession(id); showToast('toastDeleted'); }}
+          onArchiveSession={(id) => { archiveSession(id); showToast('toastArchived'); }}
           onRenameSession={renameSession}
           onSelectSettingsPage={(page) => setSettingsPage(page)}
           onReauth={onReauth ?? (() => {})}
+          onShowReadme={onShowReadme ?? (() => {})}
         />
         <SnowBackground />
         <button
@@ -125,6 +153,11 @@ export function Chat({ onReauth }: ChatProps) {
             className={`chat-brand-diamond${diamondGlow ? ' chat-brand-diamond-animate' : ''}`}
           />
           <span className="chat-brand-dot">.</span>
+          {toast && (
+            <span className={`chat-toast${toast.dropping ? ' dropping' : ''}`}>
+              {toast.text}
+            </span>
+          )}
         </button>
         {settingsPage !== null ? (
           <SettingsPage
@@ -144,6 +177,7 @@ export function Chat({ onReauth }: ChatProps) {
               onHistoryUp={getPreviousSent}
               onHistoryDown={getNextSent}
               fileInputRef={fileInputRef}
+              onFocusReady={(fn) => { inputFocusRef.current = fn; }}
             />
           </>
         )}
