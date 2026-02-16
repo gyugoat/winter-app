@@ -264,7 +264,7 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
       }
     }
 
-    // ⭐ 순서 중요! resize 먼저 -> spawn 나중
+    // ⭐ 순서 중요! resize 먼저 -> spawn 나중.
     resize();
     for (let i = 0; i < 20; i++) spawn(Math.random() * (STACK_Y - 40));
     
