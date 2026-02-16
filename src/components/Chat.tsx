@@ -42,8 +42,6 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     activeSessionId,
     sendMessage,
     isStreaming,
-    usage,
-    weeklyUsage,
     addSession,
     switchSession,
     deleteSession,
@@ -168,8 +166,6 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           onSelectSettingsPage={(page) => setSettingsPage(page)}
           onReauth={onReauth ?? (() => {})}
           onShowReadme={onShowReadme ?? (() => {})}
-          usage={usage}
-          weeklyUsage={weeklyUsage}
         />
         <SnowBackground />
         <button

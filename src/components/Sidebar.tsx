@@ -31,8 +31,6 @@ interface SidebarProps {
   onSelectSettingsPage: (page: SettingsPageId) => void;
   onReauth: () => void;
   onShowReadme: () => void;
-  usage: { input: number; output: number };
-  weeklyUsage: { input: number; output: number };
 }
 
 /* ── SVG Icons for settings menu ─────────────────── */
@@ -136,8 +134,6 @@ export function Sidebar({
   onSelectSettingsPage,
   onReauth,
   onShowReadme,
-  usage,
-  weeklyUsage,
 }: SidebarProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
