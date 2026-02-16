@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Diamond } from './Diamond';
+import olafImgSrc from '../assets/olaf.png';
 
 interface IdleScreenProps {
   onWake: () => void;
@@ -6,298 +8,274 @@ interface IdleScreenProps {
 
 export function IdleScreen({ onWake }: IdleScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const startTimeRef = useRef<number>(0);
+  
+  const imageBitmapRef = useRef<HTMLImageElement | null>(null);
+  const imageDataRef = useRef<Uint8ClampedArray | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  const handleWake = () => onWake();
 
   useEffect(() => {
-    const dismiss = () => onWake();
-    window.addEventListener('mousemove', dismiss, { once: true });
-    window.addEventListener('mousedown', dismiss, { once: true });
-    window.addEventListener('keydown', dismiss, { once: true });
-    window.addEventListener('touchstart', dismiss, { once: true });
+    window.addEventListener('keydown', handleWake);
+    window.addEventListener('mousedown', handleWake);
     return () => {
-      window.removeEventListener('mousemove', dismiss);
-      window.removeEventListener('mousedown', dismiss);
-      window.removeEventListener('keydown', dismiss);
-      window.removeEventListener('touchstart', dismiss);
+      window.removeEventListener('keydown', handleWake);
+      window.removeEventListener('mousedown', handleWake);
     };
   }, [onWake]);
 
   useEffect(() => {
+    const img = new Image();
+    img.src = olafImgSrc;
+    img.onload = () => {
+      imageBitmapRef.current = img;
+      setIsReady(true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
+
+    // 설정
+    const MAX_PARTICLES = 300; 
+    const MAX_SNOW_HEIGHT = 40; 
+    const OLAF_DURATION_MS = 10 * 60 * 1000; // 10분
+    const TRICK_PARTICLES_PER_FRAME = 20; 
 
     const dpr = window.devicePixelRatio || 1;
     let W: number, H: number;
+    let STACK_Y: number; 
+    
+    let COLS: number;
+    let heightMap: Float32Array; 
     let animId: number;
+    let spawnAccum = 0; 
 
-    const FLAKE_COUNT = 60;
-    const SNOW_HEIGHT = 38;
+    const offCanvas = document.createElement('canvas');
+    const offCtx = offCanvas.getContext('2d')!;
+    
+    const analysisCanvas = document.createElement('canvas');
+    const analysisCtx = analysisCanvas.getContext('2d')!;
 
-    interface Flake {
-      x: number; y: number;
-      r: number; speed: number;
-      drift: number; opacity: number;
-      wobble: number; wobbleSpeed: number;
+    let imgInfo = { x: 0, y: 0, w: 0, h: 0 };
+
+    interface Particle { 
+      x: number; y: number; 
+      size: number; alpha: number;
+      speed: number; drift: number; 
+      wobble: number; settled: boolean;
     }
-
-    const flakes: Flake[] = [];
+    const particles: Particle[] = [];
 
     function resize() {
       W = canvas!.clientWidth;
       H = canvas!.clientHeight;
+      
+      STACK_Y = (H / 2) + 80;
+
       canvas!.width = W * dpr;
       canvas!.height = H * dpr;
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
 
-    function initFlakes() {
-      flakes.length = 0;
-      for (let i = 0; i < FLAKE_COUNT; i++) {
-        flakes.push({
-          x: Math.random() * W,
-          y: Math.random() * H,
-          r: 1 + Math.random() * 2,
-          speed: 0.3 + Math.random() * 0.8,
-          drift: (Math.random() - 0.5) * 0.3,
-          opacity: 0.15 + Math.random() * 0.35,
-          wobble: Math.random() * Math.PI * 2,
-          wobbleSpeed: 0.005 + Math.random() * 0.01,
-        });
+      offCanvas.width = W * dpr;
+      offCanvas.height = H * dpr;
+      offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      analysisCanvas.width = W; 
+      analysisCanvas.height = H;
+
+      const COL_W = 3;
+      COLS = Math.ceil(W / COL_W) + 1;
+      heightMap = new Float32Array(COLS).fill(0);
+
+      if (imageBitmapRef.current) {
+        const img = imageBitmapRef.current;
+        
+        // 크기: 화면 높이의 18%
+        const targetHeight = H * 0.18; 
+        const scale = targetHeight / img.height;
+        
+        const imgW = img.width * scale;
+        const imgH = img.height * scale;
+        
+        // ⭐ [위치 수정] 오른쪽으로 더 멀리 보냄 (180 -> 250)
+        const centerX = W / 2;
+        const imgX = centerX + 250; 
+        const imgY = STACK_Y - imgH;
+
+        imgInfo = { x: imgX, y: imgY, w: imgW, h: imgH };
+
+        analysisCtx.clearRect(0, 0, W, H);
+        analysisCtx.drawImage(img, imgX, imgY, imgW, imgH);
+        imageDataRef.current = analysisCtx.getImageData(0, 0, W, H).data;
       }
     }
 
-    function getSnowRgb(): [number, number, number] {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue('--snow-particle').trim() || 'rgba(200,220,255,1)';
-      const m = raw.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-      return m ? [+m[1], +m[2], +m[3]] : [200, 220, 255];
+    function spawn(startY?: number) {
+      particles.push({
+        x: Math.random() * W,
+        y: startY ?? (-4 - Math.random() * 40),
+        size: 1.5 + Math.random() * 2.5, 
+        alpha: 0.3 + Math.random() * 0.6, 
+        speed: 0.8 + Math.random() * 1.4, 
+        drift: (Math.random() - 0.5) * 0.4, 
+        wobble: Math.random() * Math.PI * 2,
+        settled: false,
+      });
     }
 
-    let [sR, sG, sB] = getSnowRgb();
-    const observer = new MutationObserver(() => { [sR, sG, sB] = getSnowRgb(); });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    for (let i = 0; i < 20; i++) spawn(Math.random() * (STACK_Y - 40));
 
-    function drawSnowGround(c: CanvasRenderingContext2D) {
-      const y = H - SNOW_HEIGHT;
-      const grad = c.createLinearGradient(0, y, 0, H);
-      grad.addColorStop(0, `rgba(${sR},${sG},${sB},0.25)`);
-      grad.addColorStop(0.4, `rgba(${sR},${sG},${sB},0.4)`);
-      grad.addColorStop(1, `rgba(${sR},${sG},${sB},0.55)`);
-      c.fillStyle = grad;
-      c.beginPath();
-      c.moveTo(0, H);
-      for (let x = 0; x <= W; x += 12) {
-        const wave = Math.sin(x * 0.025) * 2 + Math.sin(x * 0.06 + 1) * 1;
-        c.lineTo(x, y + wave);
-      }
-      c.lineTo(W, H);
-      c.closePath();
-      c.fill();
+    // ⭐ [명암 분석] 픽셀의 RGB값을 그대로 가져옴
+    function getPixelData(x: number, y: number) {
+      if (!imageDataRef.current) return null;
+      const ix = Math.floor(x);
+      const iy = Math.floor(y);
+      if (ix < 0 || ix >= W || iy < 0 || iy >= H) return null;
+
+      const idx = (iy * W + ix) * 4;
+      const r = imageDataRef.current[idx];
+      const g = imageDataRef.current[idx + 1];
+      const b = imageDataRef.current[idx + 2];
+      const a = imageDataRef.current[idx + 3];
+
+      if (a < 20) return null; 
+      return { r, g, b };
     }
 
-    function drawOlaf(c: CanvasRenderingContext2D, now: number) {
-      const groundY = H - SNOW_HEIGHT;
-      const ox = W * 0.78;
-      const breathe = Math.sin(now * 0.001) * 1.5;
+    // ⭐ [Winter Ice 컬러링] 밝기에 따라 얼음 색상 매핑
+    function getIceColorStyle(r: number, g: number, b: number) {
+      // 밝기 계산 (Luminance)
+      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255; // 0.0 ~ 1.0
 
-      c.save();
-
-      // bottom body — large round ball
-      const bottomR = 32;
-      const bottomY = groundY - bottomR + 4;
-      c.fillStyle = `rgba(${sR},${sG},${sB},0.92)`;
-      c.beginPath();
-      c.ellipse(ox, bottomY + breathe * 0.3, bottomR, bottomR - 2, 0, 0, Math.PI * 2);
-      c.fill();
-      // subtle shadow on bottom body
-      const bottomGrad = c.createRadialGradient(ox, bottomY + bottomR * 0.4, 0, ox, bottomY, bottomR);
-      bottomGrad.addColorStop(0, 'rgba(0,0,0,0.06)');
-      bottomGrad.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = bottomGrad;
-      c.beginPath();
-      c.ellipse(ox, bottomY + breathe * 0.3, bottomR, bottomR - 2, 0, 0, Math.PI * 2);
-      c.fill();
-
-      // middle body — medium ball
-      const midR = 22;
-      const midY = bottomY - bottomR - midR + 12 + breathe * 0.2;
-      c.fillStyle = `rgba(${sR},${sG},${sB},0.92)`;
-      c.beginPath();
-      c.ellipse(ox, midY, midR, midR - 1, 0, 0, Math.PI * 2);
-      c.fill();
-
-      // head — small ball
-      const headR = 17;
-      const headY = midY - midR - headR + 8 + breathe * 0.1;
-      c.fillStyle = `rgba(${sR},${sG},${sB},0.95)`;
-      c.beginPath();
-      c.arc(ox, headY, headR, 0, Math.PI * 2);
-      c.fill();
-
-      // twig arms from middle body
-      c.strokeStyle = 'rgba(90,55,25,0.9)';
-      c.lineWidth = 2.5;
-      c.lineCap = 'round';
-
-      // left arm
-      c.beginPath();
-      c.moveTo(ox - midR + 2, midY - 2);
-      c.lineTo(ox - midR - 28, midY - 18);
-      c.stroke();
-      // left arm branches
-      c.lineWidth = 1.8;
-      c.beginPath();
-      c.moveTo(ox - midR - 18, midY - 12);
-      c.lineTo(ox - midR - 26, midY - 24);
-      c.stroke();
-      c.beginPath();
-      c.moveTo(ox - midR - 22, midY - 14);
-      c.lineTo(ox - midR - 30, midY - 10);
-      c.stroke();
-
-      // right arm
-      c.lineWidth = 2.5;
-      c.beginPath();
-      c.moveTo(ox + midR - 2, midY - 2);
-      c.lineTo(ox + midR + 28, midY - 18);
-      c.stroke();
-      c.lineWidth = 1.8;
-      c.beginPath();
-      c.moveTo(ox + midR + 18, midY - 12);
-      c.lineTo(ox + midR + 26, midY - 24);
-      c.stroke();
-      c.beginPath();
-      c.moveTo(ox + midR + 22, midY - 14);
-      c.lineTo(ox + midR + 30, midY - 10);
-      c.stroke();
-
-      // eyes — big Olaf-style
-      c.fillStyle = '#1a1a1a';
-      c.beginPath();
-      c.ellipse(ox - 6, headY - 4, 3, 3.5, 0, 0, Math.PI * 2);
-      c.fill();
-      c.beginPath();
-      c.ellipse(ox + 6, headY - 4, 3, 3.5, 0, 0, Math.PI * 2);
-      c.fill();
-      // eye highlights
-      c.fillStyle = 'rgba(255,255,255,0.7)';
-      c.beginPath();
-      c.arc(ox - 5, headY - 5.5, 1.2, 0, Math.PI * 2);
-      c.fill();
-      c.beginPath();
-      c.arc(ox + 7, headY - 5.5, 1.2, 0, Math.PI * 2);
-      c.fill();
-
-      // carrot nose
-      c.fillStyle = '#e87400';
-      c.beginPath();
-      c.moveTo(ox, headY + 1);
-      c.lineTo(ox + 18, headY + 3.5);
-      c.lineTo(ox, headY + 6);
-      c.closePath();
-      c.fill();
-      // nose highlight
-      c.fillStyle = 'rgba(255,180,60,0.3)';
-      c.beginPath();
-      c.moveTo(ox + 1, headY + 2);
-      c.lineTo(ox + 10, headY + 3);
-      c.lineTo(ox + 1, headY + 4);
-      c.closePath();
-      c.fill();
-
-      // smile
-      c.strokeStyle = '#1a1a1a';
-      c.lineWidth = 1.5;
-      c.beginPath();
-      c.arc(ox, headY + 9, 6, 0.15, Math.PI - 0.15);
-      c.stroke();
-
-      // buttons on middle body
-      c.fillStyle = '#1a1a1a';
-      for (let i = 0; i < 3; i++) {
-        c.beginPath();
-        c.arc(ox, midY - midR + 10 + i * 10, 2.5, 0, Math.PI * 2);
-        c.fill();
-      }
-
-      // twig hair on top of head
-      c.strokeStyle = 'rgba(90,55,25,0.85)';
-      c.lineWidth = 2;
-      c.lineCap = 'round';
-      c.beginPath();
-      c.moveTo(ox - 3, headY - headR + 1);
-      c.lineTo(ox - 5, headY - headR - 12);
-      c.stroke();
-      c.beginPath();
-      c.moveTo(ox + 2, headY - headR + 1);
-      c.lineTo(ox + 4, headY - headR - 11);
-      c.stroke();
-      c.beginPath();
-      c.moveTo(ox, headY - headR);
-      c.lineTo(ox, headY - headR - 14);
-      c.stroke();
-      // tiny branch on center twig
-      c.lineWidth = 1.5;
-      c.beginPath();
-      c.moveTo(ox, headY - headR - 9);
-      c.lineTo(ox + 5, headY - headR - 13);
-      c.stroke();
-      c.beginPath();
-      c.moveTo(ox - 5, headY - headR - 8);
-      c.lineTo(ox - 9, headY - headR - 12);
-      c.stroke();
-
-      // snow base around Olaf's feet
-      c.fillStyle = `rgba(${sR},${sG},${sB},0.5)`;
-      c.beginPath();
-      c.ellipse(ox, groundY, bottomR + 8, 6, 0, 0, Math.PI * 2);
-      c.fill();
-
-      c.restore();
+      // 어두운 부분(그림자) -> 진한 네이비 블루 (60, 90, 130)
+      // 밝은 부분(하이라이트) -> 흰색에 가까운 블루 (200, 240, 255)
+      // 이 사이를 보간(Interpolate)합니다.
+      
+      const targetR = Math.floor(60 + (140 * lum));
+      const targetG = Math.floor(90 + (150 * lum));
+      const targetB = Math.floor(130 + (125 * lum));
+      
+      // 약간의 투명도로 얼음 질감
+      return `rgba(${targetR}, ${targetG}, ${targetB}, 0.85)`;
     }
 
-    let lastTime = 0;
-    let lastDrawTime = 0;
-    const TARGET_FPS = 60;
-    const FRAME_MS = 1000 / TARGET_FPS;
-    const MIN_FRAME_INTERVAL = FRAME_MS * 0.9;
+    const snowVar = getComputedStyle(document.documentElement).getPropertyValue('--snow-particle').trim() || 'rgba(200,220,255,1)';
+    const rgbMatch = snowVar.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    const sR = rgbMatch ? +rgbMatch[1] : 200;
+    const sG = rgbMatch ? +rgbMatch[2] : 220;
+    const sB = rgbMatch ? +rgbMatch[3] : 255;
 
     function draw(now: number) {
       animId = requestAnimationFrame(draw);
+      
+      if (!startTimeRef.current) startTimeRef.current = now;
+      const elapsed = now - startTimeRef.current;
+      const progress = Math.min(1, elapsed / OLAF_DURATION_MS);
+      const allowedBuildHeight = imgInfo.h * progress;
 
-      if (!lastTime) lastTime = now;
+      // 1. 눈속임 (Trick): 명암 적용된 파티클 생성
+      for(let k=0; k < TRICK_PARTICLES_PER_FRAME; k++) {
+          if (progress >= 1) break; 
+          const rx = imgInfo.x + Math.random() * imgInfo.w;
+          const ry = STACK_Y - (Math.random() * allowedBuildHeight);
 
-      const elapsed = now - lastDrawTime;
-      if (lastDrawTime && elapsed < MIN_FRAME_INTERVAL) return;
-
-      const dt = Math.min(now - lastTime, 100) / FRAME_MS;
-      lastTime = now;
-      lastDrawTime = now;
-
-      ctx!.clearRect(0, 0, W, H);
-
-      for (const f of flakes) {
-        f.y += f.speed * dt;
-        f.wobble = (f.wobble + f.wobbleSpeed * dt) % (Math.PI * 2);
-        f.x += (f.drift + Math.sin(f.wobble) * 0.3) * dt;
-
-        if (f.y >= H) { f.y = -5; f.x = Math.random() * W; }
-        if (f.x > W + 5) f.x = -5;
-        if (f.x < -5) f.x = W + 5;
-
-        ctx!.beginPath();
-        ctx!.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-        ctx!.fillStyle = `rgba(${sR},${sG},${sB},${f.opacity})`;
-        ctx!.fill();
+          const pixel = getPixelData(rx, ry);
+          if (pixel) {
+              // ⭐ 명암 적용된 색상 사용
+              offCtx.fillStyle = getIceColorStyle(pixel.r, pixel.g, pixel.b);
+              offCtx.beginPath();
+              // 약간 작게 찍어서 디테일 살림
+              offCtx.arc(rx, ry, 1 + Math.random(), 0, Math.PI * 2);
+              offCtx.fill();
+          }
       }
 
-      drawSnowGround(ctx!);
-      drawOlaf(ctx!, now);
+      spawnAccum += 0.8;
+      let active = 0;
+      for (let i = 0; i < particles.length; i++) {
+        if (!particles[i].settled) active++;
+      }
+      while (spawnAccum >= 1 && active < MAX_PARTICLES) {
+        spawn();
+        active++;
+        spawnAccum -= 1;
+      }
+      spawnAccum = Math.min(spawnAccum, 3);
+
+      ctx!.clearRect(0, 0, W, H);
+      ctx!.drawImage(offCanvas, 0, 0, W, H);
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        
+        if (!p.settled) {
+            p.y += p.speed;
+            p.x += p.drift + Math.sin(now * 0.0009 + p.wobble) * 0.2;
+
+            const COL_W = 3; 
+            const col = Math.max(0, Math.min(COLS - 1, Math.floor(p.x / COL_W)));
+            const currentPileH = heightMap[col];
+            const collisionY = STACK_Y - currentPileH;
+
+            if (p.y + p.size >= collisionY) {
+                const pixel = getPixelData(p.x, collisionY);
+                
+                let shouldAccumulate = false;
+                let bump = p.size * 0.7; 
+
+                if (pixel) {
+                    const heightFromGround = STACK_Y - collisionY;
+                    if (heightFromGround < allowedBuildHeight + (Math.random() * 5)) {
+                        shouldAccumulate = true;
+                        // ⭐ 충돌한 눈송이도 명암 색상으로 변신
+                        offCtx.fillStyle = getIceColorStyle(pixel.r, pixel.g, pixel.b);
+                    }
+                } else {
+                    if (currentPileH < MAX_SNOW_HEIGHT) {
+                        shouldAccumulate = true;
+                        offCtx.fillStyle = `rgba(${sR},${sG},${sB},${p.alpha})`;
+                    }
+                }
+
+                if (shouldAccumulate) {
+                    heightMap[col] = Math.min(heightMap[col] + bump, 999); 
+                    
+                    for (let d = 1; d <= 2; d++) {
+                        const falloff = 0.3 / d;
+                        if (col - d >= 0) heightMap[col - d] += bump * falloff;
+                        if (col + d < COLS) heightMap[col + d] += bump * falloff;
+                    }
+
+                    offCtx.beginPath();
+                    offCtx.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2);
+                    offCtx.fill();
+                }
+
+                p.settled = true; 
+            }
+        }
+
+        if (!p.settled && p.alpha > 0.01 && p.y < H + 20) {
+            ctx!.beginPath();
+            ctx!.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2);
+            ctx!.fillStyle = `rgba(${sR},${sG},${sB},${p.alpha})`;
+            ctx!.fill();
+        }
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        if (particles[i].settled) particles.splice(i, 1);
+      }
     }
 
     resize();
-    initFlakes();
-    animId = requestAnimationFrame((t) => draw(t));
+    animId = requestAnimationFrame(draw);
 
     const onResize = () => resize();
     window.addEventListener('resize', onResize);
@@ -305,36 +283,27 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', onResize);
-      observer.disconnect();
     };
-  }, []);
+  }, [isReady]);
 
   return (
     <div
+      onClick={handleWake} 
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 9998,
-        background: 'var(--bg-deep)',
-        borderRadius: 10,
-        animation: 'idleFadeIn 0.8s ease',
+        position: 'fixed', inset: 0, zIndex: 9998,
+        background: 'var(--bg-deep)', animation: 'idleFadeIn 0.8s ease',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default',
       }}
     >
-      <canvas
-        ref={canvasRef}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-        }}
-      />
-      <style>{`
-        @keyframes idleFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-      `}</style>
+      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+      
+      <div style={{ position: 'relative', zIndex: 10, marginBottom: '80px' }}>
+        <Diamond size={64} glow={true} />
+        <style>{`@keyframes idlePulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); opacity: 0.8; } }`}</style>
+      </div>
+
+      {!isReady && <div style={{color:'rgba(255,255,255,0.3)', fontSize:'12px', position:'absolute', bottom:20}}>Loading...</div>}
+      <style>{`@keyframes idleFadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
     </div>
   );
 }

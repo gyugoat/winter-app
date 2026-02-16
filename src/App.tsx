@@ -12,7 +12,7 @@ import './styles/global.css';
 
 type AppPhase = 'splash' | 'readme' | 'auth' | 'chat';
 
-const IDLE_TIMEOUT = 5 * 60 * 1000;
+const IDLE_TIMEOUT = 3 * 60 * 1000;
 
 function App() {
   const { isAuthenticated, getAuthorizeUrl, exchangeCode, loading } = useAuth();

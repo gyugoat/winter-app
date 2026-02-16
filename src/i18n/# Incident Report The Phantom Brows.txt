@@ -1,0 +1,74 @@
+# Incident Report: The Phantom Browser Tabs
+**Date:** 2026-02-14
+**Subject:** Recurring Chrome Tab Spawning despite Process Termination
+**Environment:** Windows 11 (Host) + WSL2 (Guest: Ubuntu)
+
+## 1. Context (Situation)
+- **Goal:** Run `frost-opencode` agent as a background service within WSL.
+- **Observation:** A new Chrome tab pointing to the agent's authentication page opens automatically every few minutes.
+- **User Action:** Manually closed tabs and killed processes (`pkill`, `systemctl stop`) inside WSL.
+- **Result:** Tabs continued to open, creating a loop.
+
+## 2. The Logic Flow (The Bug)
+The issue was a **Cross-OS Logic Conflict** between the Host (Windows) and the Guest (Linux/WSL).
+
+### State A: The Host (Windows)
+- **Actor:** Windows Task Scheduler (`WSL-Guardian`).
+- **Trigger:** Time-based (Every X minutes).
+- **Action:** blindly execute `wsl.exe ... start_service.sh`.
+- **Logic Flaw:** **Blind Execution.** It did not check if the service was already running or if the user intentionally stopped it.
+
+### State B: The Guest (WSL)
+- **Actor:** `opencode` binary (started by Host).
+- **Default Behavior:** Upon launch, if no token is provided or configured, it **automatically invokes the default system browser** for user authentication.
+- **Logic Flaw:** **Defaulting to Interactive Mode.** The service was treated as a foreground application, not a headless daemon.
+
+### The Loop (Vicious Cycle)
+1. **Windows** triggers start command.
+2. **WSL** starts a new `opencode` instance.
+3. **Opencode** detects "Started," immediately executes `open_browser()` command.
+4. **User** sees tab, kills process/tab.
+5. **Windows** waits for next trigger interval -> **GOTO 1**.
+
+## 3. Why it was Hard to Debug
+- **Internal Blindness:** The AI agent (Winter) looked for causes *inside* the WSL logs.
+- **Missing Data:** The "Trigger" came from *outside* the observable environment (Windows Host). WSL logs showed "Service Started" but not "Who started it."
+- **Constraint Side Effect:** The `DO NOT GUESS` rule prevented the agent from hypothesizing about external (Host OS) interference.
+📂 Corestep.md
+(부제: Resolution & Architectural Insight)
+
+Markdown
+# Resolution: Cross-OS Service Stabilization
+**Status:** Resolved
+**Key Principle:** Explicit Constraint & Headless Configuration
+
+## 1. Diagnosis (Root Cause Analysis)
+- **Symptom:** Tabs opened even after `systemctl stop` and `kill -9`.
+- **Deduction:** If the internal system (WSL) is dead but the action (Tab Open) persists, the trigger must be **External (Host OS)**.
+- **Confirmed Cause:** Windows Task Scheduler was force-starting the service repeatedly.
+
+## 2. Solution (The Fix)
+We applied a **"Muzzle" (Constraint)** to the service executable, rather than disabling the external trigger (Guardian).
+
+### Action: Force Headless Mode
+- **Target:** `frost-opencode.service` configuration.
+- **Modification:** Appended the `--no-browser` flag to the execution command.
+- **Logic Change:**
+    - *Before:* Start -> Check Auth -> If missing, Open Browser.
+    - *After:* Start -> Check Auth -> If missing, **Log error and Wait (Do NOT Open Browser).**
+
+## 3. Strategic Insight for AI Agents (Read Carefully)
+To prevent future recurrence, the following logic updates are required for System Architecture:
+
+### A. The "Blind Execution" Problem
+- **Lesson:** Never assume a start command is valid just because it was received.
+- **New Rule:** Before starting a service, always check **"Is it already running?"** (Idempotency).
+- **Application:** The Guardian (Scheduler) should check service status before issuing a start command.
+
+### B. The "Headless" Default
+- **Lesson:** For any backend service or agent, **GUI/Browser interaction must be Opt-in, not Default.**
+- **New Rule:** Always explicitly disable browser launching flags (`--no-browser`, `--headless`) for background services unless strictly requested by the user.
+
+### C. Overcoming "DO NOT GUESS"
+- **Lesson:** When internal logs are clean but the issue persists, the cause is likely **Environmental (Host OS, Network, Hardware).**
+- **New Rule:** If internal diagnosis fails, **Hypothesize External Triggers** (e.g., Windows Scheduler, Hardware interrupts) and request verification from the user.
