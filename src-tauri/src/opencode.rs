@@ -320,7 +320,7 @@ impl OpenCodeClient {
 
                                     match status {
                                         "running" => {
-                                            if !tool_started.contains_key(&call_id) {
+                                            if let std::collections::hash_map::Entry::Vacant(e) = tool_started.entry(call_id.clone()) {
                                                 if is_summer {
                                                     let _ = on_event.send(ChatStreamEvent::Status {
                                                         text: "Delegating to Summer...".to_string(),
@@ -338,18 +338,18 @@ impl OpenCodeClient {
                                                 }
                                                 let _ = on_event.send(ChatStreamEvent::ToolStart {
                                                     name: tool_name,
-                                                    id: call_id.clone(),
+                                                    id: call_id,
                                                 });
-                                                tool_started.insert(call_id, true);
+                                                e.insert(true);
                                             }
                                         }
                                         "completed" => {
-                                            if !tool_started.contains_key(&call_id) {
+                                            if let std::collections::hash_map::Entry::Vacant(e) = tool_started.entry(call_id.clone()) {
                                                 let _ = on_event.send(ChatStreamEvent::ToolStart {
                                                     name: tool_name,
                                                     id: call_id.clone(),
                                                 });
-                                                tool_started.insert(call_id.clone(), true);
+                                                e.insert(true);
                                             }
 
                                             let output = state
@@ -444,7 +444,7 @@ impl OpenCodeClient {
                         }
                     }
 
-                    "session.updated" | _ => {}
+                    _ => {}
                 }
             }
         }
