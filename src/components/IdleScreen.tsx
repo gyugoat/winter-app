@@ -42,14 +42,16 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
     if (!ctx) return;
 
     // 설정
-    const MAX_PARTICLES = 300; 
+    const MAX_PARTICLES = 30; 
     const MAX_SNOW_HEIGHT = 40; 
     const OLAF_DURATION_MS = 10 * 60 * 1000; // 10분
-    const TRICK_PARTICLES_PER_FRAME = 20; 
+    const TRICK_PARTICLES_PER_FRAME = 3; 
 
     const dpr = window.devicePixelRatio || 1;
     let W: number, H: number;
-    let STACK_Y: number; 
+    
+    // ⭐ [수정 핵심] 초기값을 0으로 확실하게 할당! (에러 원인 해결)
+    let STACK_Y = 0; 
     
     let COLS: number;
     let heightMap: Float32Array; 
@@ -95,15 +97,12 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
 
       if (imageBitmapRef.current) {
         const img = imageBitmapRef.current;
-        
-        // 크기: 화면 높이의 18%
         const targetHeight = H * 0.18; 
         const scale = targetHeight / img.height;
         
         const imgW = img.width * scale;
         const imgH = img.height * scale;
         
-        // ⭐ [위치 수정] 오른쪽으로 더 멀리 보냄 (180 -> 250)
         const centerX = W / 2;
         const imgX = centerX + 250; 
         const imgY = STACK_Y - imgH;
@@ -129,9 +128,6 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
       });
     }
 
-    for (let i = 0; i < 20; i++) spawn(Math.random() * (STACK_Y - 40));
-
-    // ⭐ [명암 분석] 픽셀의 RGB값을 그대로 가져옴
     function getPixelData(x: number, y: number) {
       if (!imageDataRef.current) return null;
       const ix = Math.floor(x);
@@ -148,21 +144,18 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
       return { r, g, b };
     }
 
-    // ⭐ [Winter Ice 컬러링] 밝기에 따라 얼음 색상 매핑
     function getIceColorStyle(r: number, g: number, b: number) {
-      // 밝기 계산 (Luminance)
-      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255; // 0.0 ~ 1.0
+      let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      lum = Math.pow(lum, 4); 
 
-      // 어두운 부분(그림자) -> 진한 네이비 블루 (60, 90, 130)
-      // 밝은 부분(하이라이트) -> 흰색에 가까운 블루 (200, 240, 255)
-      // 이 사이를 보간(Interpolate)합니다.
+      const shadowR = 30, shadowG = 50, shadowB = 90;
+      const lightR = 210, lightG = 245, lightB = 255;
+
+      const targetR = Math.floor(shadowR + ((lightR - shadowR) * lum));
+      const targetG = Math.floor(shadowG + ((lightG - shadowG) * lum));
+      const targetB = Math.floor(shadowB + ((lightB - shadowB) * lum));
       
-      const targetR = Math.floor(60 + (140 * lum));
-      const targetG = Math.floor(90 + (150 * lum));
-      const targetB = Math.floor(130 + (125 * lum));
-      
-      // 약간의 투명도로 얼음 질감
-      return `rgba(${targetR}, ${targetG}, ${targetB}, 0.85)`;
+      return `rgba(${targetR}, ${targetG}, ${targetB}, 0.95)`;
     }
 
     const snowVar = getComputedStyle(document.documentElement).getPropertyValue('--snow-particle').trim() || 'rgba(200,220,255,1)';
@@ -179,7 +172,7 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
       const progress = Math.min(1, elapsed / OLAF_DURATION_MS);
       const allowedBuildHeight = imgInfo.h * progress;
 
-      // 1. 눈속임 (Trick): 명암 적용된 파티클 생성
+      // 1. 눈속임 파티클
       for(let k=0; k < TRICK_PARTICLES_PER_FRAME; k++) {
           if (progress >= 1) break; 
           const rx = imgInfo.x + Math.random() * imgInfo.w;
@@ -187,11 +180,9 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
 
           const pixel = getPixelData(rx, ry);
           if (pixel) {
-              // ⭐ 명암 적용된 색상 사용
               offCtx.fillStyle = getIceColorStyle(pixel.r, pixel.g, pixel.b);
               offCtx.beginPath();
-              // 약간 작게 찍어서 디테일 살림
-              offCtx.arc(rx, ry, 1 + Math.random(), 0, Math.PI * 2);
+              offCtx.arc(rx, ry, 0.8 + Math.random(), 0, Math.PI * 2);
               offCtx.fill();
           }
       }
@@ -233,7 +224,6 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
                     const heightFromGround = STACK_Y - collisionY;
                     if (heightFromGround < allowedBuildHeight + (Math.random() * 5)) {
                         shouldAccumulate = true;
-                        // ⭐ 충돌한 눈송이도 명암 색상으로 변신
                         offCtx.fillStyle = getIceColorStyle(pixel.r, pixel.g, pixel.b);
                     }
                 } else {
@@ -274,7 +264,10 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
       }
     }
 
+    // ⭐ 순서 중요! resize 먼저 -> spawn 나중
     resize();
+    for (let i = 0; i < 20; i++) spawn(Math.random() * (STACK_Y - 40));
+    
     animId = requestAnimationFrame(draw);
 
     const onResize = () => resize();
