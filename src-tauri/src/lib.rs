@@ -402,7 +402,10 @@ fn generate_pkce() -> (String, String) {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use base64::Engine;
     use sha2::{Digest, Sha256};
-    let verifier = URL_SAFE_NO_PAD.encode(&(0..32).map(|_| rand::random::<u8>()).collect::<Vec<u8>>());
+
+    //수정된 부분: 괄호 앞의 '&'를 제거. github Clippy issue ㅅㅂ
+    let verifier = URL_SAFE_NO_PAD.encode((0..32).map(|_| rand::random::<u8>()).collect::<Vec<u8>>());
+    
     let mut hasher = Sha256::new();
     hasher.update(verifier.as_bytes());
     let challenge = URL_SAFE_NO_PAD.encode(hasher.finalize());
