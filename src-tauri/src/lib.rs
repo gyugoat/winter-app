@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{ipc::Channel, AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
@@ -33,7 +34,13 @@ Never say \"I can't do X\" with a long disclaimer — just say what you CAN do o
 Keep responses short unless the user clearly wants detail. \
 You have tools available: you can run shell commands, read/write files, and list directories. \
 Use them when the user asks you to do something on their computer. \
-You have personality. You're not a search engine. You're Winter.";
+You have personality. You're not a search engine. You're Winter.\n\n\
+HARD RULES — VIOLATION = BROKEN:\n\
+- NEVER write summaries of the conversation. No \"Session Summary\", no \"As-Is\", no \"Context Summary\".\n\
+- NEVER list what the user previously asked. They remember. You remember. Move forward.\n\
+- NEVER re-output content you already read from files or prior messages.\n\
+- If the user asks \"what did we do?\" — answer in 2-3 bullet points max: what's done, what remains.\n\
+- Every output token costs money. Be concise. No narration. No filler. Results only.";
 
 const STORE_KEY_MBTI_MODIFIER: &str = "mbti_prompt_modifier";
 
@@ -184,13 +191,27 @@ async fn execute_tool(name: &str, input: &Value) -> (String, bool) {
     match name {
         "shell_exec" => {
             let cmd = input["command"].as_str().unwrap_or("");
-            match tokio::process::Command::new("bash")
+            const TIMEOUT: Duration = Duration::from_secs(120);
+            const MAX_OUTPUT: usize = 512 * 1024;
+
+            // Block destructive patterns
+            let blocked = ["rm -rf /", "rm -rf ~", "mkfs.", "dd if=", ":(){", "fork bomb",
+                           "> /dev/sd", "chmod -R 777 /", "curl|bash", "wget|bash", "curl|sh", "wget|sh"];
+            let cmd_lower = cmd.to_lowercase();
+            for pattern in &blocked {
+                if cmd_lower.contains(pattern) {
+                    return (format!("Blocked: dangerous command pattern '{}' detected", pattern), true);
+                }
+            }
+
+            let child = tokio::process::Command::new("bash")
                 .arg("-c")
                 .arg(cmd)
-                .output()
-                .await
-            {
-                Ok(output) => {
+                .kill_on_drop(true)
+                .output();
+
+            match tokio::time::timeout(TIMEOUT, child).await {
+                Ok(Ok(output)) => {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     let mut result = String::new();
@@ -203,9 +224,14 @@ async fn execute_tool(name: &str, input: &Value) -> (String, bool) {
                     if result.is_empty() {
                         result = format!("(exit code {})", output.status.code().unwrap_or(-1));
                     }
+                    if result.len() > MAX_OUTPUT {
+                        result.truncate(MAX_OUTPUT);
+                        result.push_str("\n...[truncated at 512KB]");
+                    }
                     (result, !output.status.success())
                 }
-                Err(e) => (format!("Failed to execute: {}", e), true),
+                Ok(Err(e)) => (format!("Failed to execute: {}", e), true),
+                Err(_) => ("Command timed out after 120s".to_string(), true),
             }
         }
         "file_read" => {
@@ -280,7 +306,7 @@ async fn stream_response(
         .header("authorization", format!("Bearer {}", access_token))
         .header("anthropic-version", ANTHROPIC_VERSION)
         .header("anthropic-beta", "oauth-2025-04-20")
-        .header("user-agent", "claude-code/2.0.60")
+        .header("user-agent", "winter-app/1.0.0")
         .header("x-app", "cli")
         .header("content-type", "application/json")
         .json(&body)
@@ -288,15 +314,13 @@ async fn stream_response(
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
 
-    // ✅ 수정된 부분: status를 먼저 저장하고 나서 text()를 호출합니다.
     if !response.status().is_success() {
-        let status = response.status(); // 상태 코드 복사
+        let status = response.status();
         if status.as_u16() == 401 { return Err("AUTH_EXPIRED".to_string()); }
         let body = response.text().await.unwrap_or_default(); // 여기서 response 소모됨
         return Err(format!("Claude API error {}: {}", status, body));
     }
 
-    // ... (이 아래 나머지 코드는 기존과 동일)
     let mut stream = response.bytes_stream();
     let mut buffer = String::new();
     let mut text_content = String::new();
@@ -425,7 +449,7 @@ fn get_authorize_url(app: AppHandle) -> Result<String, String> {
         ("code_challenge", challenge.as_str()), ("code_challenge_method", "S256"), ("state", verifier.as_str()),
     ].iter().map(|(k, v)| format!("{}={}", k, urlencoding::encode(v))).collect::<Vec<_>>().join("&");
 
-    *app.state::<Mutex<Option<PkceState>>>().lock().unwrap() = Some(PkceState { verifier, created: now_millis() });
+    *app.state::<Mutex<Option<PkceState>>>().lock().unwrap_or_else(|e| e.into_inner()) = Some(PkceState { verifier, created: now_millis() });
     Ok(format!("https://claude.ai/oauth/authorize?{}", query))
 }
 
@@ -433,16 +457,14 @@ fn get_authorize_url(app: AppHandle) -> Result<String, String> {
 
 async fn exchange_code(app: AppHandle, code: String) -> Result<(), String> {
     let verifier = {
-        // ✅ 수정됨: state를 먼저 변수에 저장해서 수명을 연장시킴
         let state = app.state::<Mutex<Option<PkceState>>>();
-        let guard = state.lock().unwrap();
+        let guard = state.lock().unwrap_or_else(|e| e.into_inner());
         match guard.as_ref() {
             Some(s) => s.verifier.clone(),
             None => return Err("No PKCE state. Get authorize URL first.".to_string()),
         }
     };
     
-    // ... (아래는 기존과 동일)
     let parts: Vec<&str> = code.split('#').collect();
     let payload = json!({
         "code": parts[0], "state": if parts.len() > 1 { parts[1] } else { "" },
@@ -459,13 +481,12 @@ async fn exchange_code(app: AppHandle, code: String) -> Result<(), String> {
     store.set(STORE_KEY_REFRESH, json!(tokens.refresh_token));
     store.set(STORE_KEY_EXPIRES, json!(now_millis() + tokens.expires_in * 1000));
     store.save().map_err(|e| e.to_string())?;
-    *app.state::<Mutex<Option<PkceState>>>().lock().unwrap() = None;
+    *app.state::<Mutex<Option<PkceState>>>().lock().unwrap_or_else(|e| e.into_inner()) = None;
     Ok(())
 }
 
 #[tauri::command]
 async fn is_authenticated(app: AppHandle) -> Result<bool, String> {
-    // ✅ 수정됨: 복잡한 체이닝 대신 map을 사용해 안전하게 처리
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
     let access_token = store.get(STORE_KEY_ACCESS);
     
@@ -488,8 +509,12 @@ async fn logout(app: AppHandle) -> Result<(), String> {
 }
 
 fn get_access_token(app: &AppHandle) -> Result<String, String> {
-    app.store(STORE_FILE).map_err(|e| e.to_string())?
-        .get(STORE_KEY_ACCESS).and_then(|v| v.as_str().map(|s| s.to_string()))
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let expires = store.get(STORE_KEY_EXPIRES).and_then(|v| v.as_u64()).unwrap_or(0);
+    if now_millis() > expires {
+        return Err("AUTH_EXPIRED".to_string());
+    }
+    store.get(STORE_KEY_ACCESS).and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or_else(|| "Not authenticated.".to_string())
 }
 
@@ -513,14 +538,12 @@ async fn refresh_access_token(app: &AppHandle) -> Result<String, String> {
 // ── Feedback Email ─────────────────────────────────────────────────
 
 #[tauri::command]
-async fn send_feedback(_app: AppHandle, text: String) -> Result<(), String> { // 👈 _app으로 변경
-    // 👇 디스코드 웹훅 URL (아까 그 주소!)
-    const DISCORD_WEBHOOK_URL: &str = "https://discord.com/api/webhooks/1472879486923046963/dncdu4PiCQXR6vG7H0Tp6m1WB37MJlArhskCuStnqpiBih7qsrvYzVa2YwGdRwQNK35K";
+async fn send_feedback(_app: AppHandle, text: String) -> Result<(), String> {
+    const DISCORD_WEBHOOK_URL: &str = env!("DISCORD_WEBHOOK_URL");
 
     if text.trim().is_empty() {
         return Err("Feedback text is empty.".to_string());
     }
-    // ... (나머지 로직은 동일)
     let client = reqwest::Client::new();
     let payload = serde_json::json!({
         "username": "Winter Bot",
@@ -580,6 +603,76 @@ async fn ollama_set_config(app: AppHandle, url: String, model: String) -> Result
     Ok(())
 }
 
+// ── Claude Usage API ────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+struct UsageLimit {
+    utilization: Option<f64>,
+    resets_at: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+struct ClaudeUsage {
+    five_hour: Option<UsageLimit>,
+    seven_day: Option<UsageLimit>,
+    seven_day_opus: Option<UsageLimit>,
+}
+
+#[tauri::command]
+async fn fetch_claude_usage(app: AppHandle) -> Result<ClaudeUsage, String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let session_key = store.get("claude_session_key")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .ok_or_else(|| "No session key. Set it in Settings → Token → Connect.".to_string())?;
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    #[derive(Deserialize)]
+    struct Org { uuid: String }
+
+    let orgs: Vec<Org> = client
+        .get("https://claude.ai/api/organizations")
+        .header("cookie", format!("sessionKey={}", session_key))
+        .header("accept", "application/json")
+        .send().await.map_err(|e| format!("Orgs request failed: {}", e))?
+        .json().await.map_err(|e| format!("Orgs parse failed: {}", e))?;
+
+    let org_id = orgs.first().map(|o| o.uuid.clone())
+        .ok_or_else(|| "No organization found.".to_string())?;
+
+    let usage_url = format!("https://claude.ai/api/organizations/{}/usage", org_id);
+    let body: Value = client
+        .get(&usage_url)
+        .header("cookie", format!("sessionKey={}", session_key))
+        .header("accept", "application/json")
+        .send().await.map_err(|e| format!("Usage request failed: {}", e))?
+        .json().await.map_err(|e| format!("Usage parse failed: {}", e))?;
+
+    let parse_limit = |key: &str| -> Option<UsageLimit> {
+        body.get(key).map(|v| UsageLimit {
+            utilization: v.get("utilization").and_then(|u| u.as_f64()),
+            resets_at: v.get("resets_at").and_then(|r| r.as_str().map(|s| s.to_string())),
+        })
+    };
+
+    Ok(ClaudeUsage {
+        five_hour: parse_limit("five_hour"),
+        seven_day: parse_limit("seven_day"),
+        seven_day_opus: parse_limit("seven_day_opus"),
+    })
+}
+
+#[tauri::command]
+async fn set_session_key(app: AppHandle, key: String) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    store.set("claude_session_key", json!(key));
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── Chat Streaming Command ────────────────────────────────────────
 
 #[tauri::command]
@@ -593,7 +686,9 @@ async fn chat_send(app: AppHandle, messages: Vec<ChatMessage>, on_event: Channel
     let client = Client::new();
     let abort_flag = app.state::<Arc<AtomicBool>>();
     abort_flag.store(false, Ordering::SeqCst);
-    let _ = on_event.send(ChatStreamEvent::StreamStart);
+    tokio::task::yield_now().await;
+    abort_flag.store(false, Ordering::SeqCst);
+    if on_event.send(ChatStreamEvent::StreamStart).is_err() { return Ok(()); }
 
     let system_prompt = build_system_prompt(&app);
     let model = get_model(&app);
@@ -608,12 +703,25 @@ async fn chat_send(app: AppHandle, messages: Vec<ChatMessage>, on_event: Channel
         let _ = on_event.send(ChatStreamEvent::OllamaStatus { status: "done".to_string() });
     }
 
-    for _ in 0..MAX_TOOL_ROUNDS {
+    for round in 0..MAX_TOOL_ROUNDS {
         if abort_flag.load(Ordering::SeqCst) { break; }
+        if round > 0 {
+            if let Err(e) = get_access_token(&app) {
+                if e == "AUTH_EXPIRED" {
+                    let mutex = app.state::<tokio::sync::Mutex<()>>();
+                    let _guard = mutex.lock().await;
+                    access_token = refresh_access_token(&app).await?;
+                    drop(_guard);
+                }
+            }
+        }
         let result = match stream_response(&client, &access_token, &conversation, &on_event, &system_prompt, &abort_flag, &model).await {
             Ok(r) => r,
             Err(e) if e == "AUTH_EXPIRED" => {
+                let mutex = app.state::<tokio::sync::Mutex<()>>();
+                let _guard = mutex.lock().await;
                 access_token = refresh_access_token(&app).await?;
+                drop(_guard);
                 stream_response(&client, &access_token, &conversation, &on_event, &system_prompt, &abort_flag, &model).await?
             }
             Err(e) => return Err(e),
@@ -658,10 +766,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(None::<PkceState>))
         .manage(Arc::new(AtomicBool::new(false)))
+        .manage(tokio::sync::Mutex::new(()))
         .invoke_handler(tauri::generate_handler![
             get_authorize_url, exchange_code, is_authenticated, logout, chat_send,
             send_feedback, abort_stream, ollama_is_installed, ollama_install,
             ollama_check, ollama_models, ollama_toggle, ollama_set_config,
+            fetch_claude_usage, set_session_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

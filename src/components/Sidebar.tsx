@@ -1,10 +1,22 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { Session } from '../types';
 import type { SettingsPageId } from './Chat';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';
 import { useI18n } from '../i18n';
 import '../styles/sidebar.css';
+
+interface ClaudeUsageLimit {
+  utilization: number | null;
+  resets_at: string | null;
+}
+
+interface ClaudeUsage {
+  five_hour: ClaudeUsageLimit | null;
+  seven_day: ClaudeUsageLimit | null;
+  seven_day_opus: ClaudeUsageLimit | null;
+}
 
 interface SidebarProps {
   open: boolean;
@@ -19,6 +31,8 @@ interface SidebarProps {
   onSelectSettingsPage: (page: SettingsPageId) => void;
   onReauth: () => void;
   onShowReadme: () => void;
+  usage: { input: number; output: number };
+  weeklyUsage: { input: number; output: number };
 }
 
 /* ── SVG Icons for settings menu ─────────────────── */
@@ -122,6 +136,8 @@ export function Sidebar({
   onSelectSettingsPage,
   onReauth,
   onShowReadme,
+  usage,
+  weeklyUsage,
 }: SidebarProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
@@ -132,6 +148,36 @@ export function Sidebar({
   const [subPopup, setSubPopup] = useState<SubPopup>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const { mode, setMode } = useTheme();
+  const [claudeUsage, setClaudeUsage] = useState<ClaudeUsage | null>(null);
+  const [claudeUsageLoading, setClaudeUsageLoading] = useState(false);
+  const [claudeUsageError, setClaudeUsageError] = useState(false);
+  const [sessionKeyInput, setSessionKeyInput] = useState('');
+  const [sessionKeySaved, setSessionKeySaved] = useState(false);
+
+  const fetchClaudeUsage = useCallback(async () => {
+    setClaudeUsageLoading(true);
+    setClaudeUsageError(false);
+    try {
+      const data = await invoke<ClaudeUsage>('fetch_claude_usage');
+      setClaudeUsage(data);
+    } catch {
+      setClaudeUsageError(true);
+    }
+    setClaudeUsageLoading(false);
+  }, []);
+
+  const saveSessionKey = useCallback(async () => {
+    if (!sessionKeyInput.trim()) return;
+    try {
+      await invoke('set_session_key', { key: sessionKeyInput.trim() });
+      setSessionKeySaved(true);
+      setSessionKeyInput('');
+      setTimeout(() => setSessionKeySaved(false), 2000);
+      fetchClaudeUsage();
+    } catch {
+      // silent
+    }
+  }, [sessionKeyInput, fetchClaudeUsage]);
 
   useEffect(() => {
     if (!open) {
@@ -312,7 +358,12 @@ export function Sidebar({
               <div className="settings-popup-item-wrap">
                 <button
                   className={`settings-popup-item${subPopup === 'token' ? ' active' : ''}`}
-                  onClick={(e) => { onFlash(e); setSubPopup(subPopup === 'token' ? null : 'token'); }}
+                  onClick={(e) => {
+                    onFlash(e);
+                    const next = subPopup === 'token' ? null : 'token';
+                    setSubPopup(next);
+                    if (next === 'token') fetchClaudeUsage();
+                  }}
                   role="menuitem"
                 >
                   <span className="settings-popup-icon">{MENU_ICONS.token}</span>
@@ -327,11 +378,67 @@ export function Sidebar({
                   <div className="settings-sub-popup" role="menu" aria-label={t('ariaToken')}>
                     <div className="settings-sub-popup-item" role="menuitem">
                       <span>{t('tokenSession')}</span>
-                      <span className="settings-sub-popup-stat">0</span>
+                      <span className="settings-sub-popup-stat">{(usage.input + usage.output).toLocaleString()}</span>
                     </div>
                     <div className="settings-sub-popup-item" role="menuitem">
                       <span>{t('tokenWeekly')}</span>
-                      <span className="settings-sub-popup-stat">0</span>
+                      <span className="settings-sub-popup-stat">{(weeklyUsage.input + weeklyUsage.output).toLocaleString()}</span>
+                    </div>
+                    <div className="settings-sub-popup-divider" />
+                    {claudeUsageLoading ? (
+                      <div className="settings-sub-popup-item" role="menuitem">
+                        <span>{t('tokenUsageLoading')}</span>
+                      </div>
+                    ) : claudeUsageError ? (
+                      <div className="settings-sub-popup-item" role="menuitem">
+                        <span>{t('tokenUsageError')}</span>
+                        <button className="settings-sub-popup-refresh" onClick={fetchClaudeUsage}>↻</button>
+                      </div>
+                    ) : claudeUsage ? (
+                      <>
+                        {claudeUsage.five_hour && (
+                          <div className="settings-sub-popup-item" role="menuitem">
+                            <span>{t('tokenUsage5h')}</span>
+                            <span className="settings-sub-popup-stat">
+                              {claudeUsage.five_hour.utilization != null ? `${Math.round(claudeUsage.five_hour.utilization * 100)}%` : t('tokenUsageNone')}
+                            </span>
+                          </div>
+                        )}
+                        {claudeUsage.seven_day && (
+                          <div className="settings-sub-popup-item" role="menuitem">
+                            <span>{t('tokenUsage7d')}</span>
+                            <span className="settings-sub-popup-stat">
+                              {claudeUsage.seven_day.utilization != null ? `${Math.round(claudeUsage.seven_day.utilization * 100)}%` : t('tokenUsageNone')}
+                            </span>
+                          </div>
+                        )}
+                        {claudeUsage.seven_day_opus && (
+                          <div className="settings-sub-popup-item" role="menuitem">
+                            <span>{t('tokenUsageOpus')}</span>
+                            <span className="settings-sub-popup-stat">
+                              {claudeUsage.seven_day_opus.utilization != null ? `${Math.round(claudeUsage.seven_day_opus.utilization * 100)}%` : t('tokenUsageNone')}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="settings-sub-popup-item" role="menuitem">
+                        <span>{t('tokenUsageNone')}</span>
+                      </div>
+                    )}
+                    <div className="settings-sub-popup-divider" />
+                    <div className="settings-sub-popup-key-row">
+                      <input
+                        className="settings-sub-popup-key-input"
+                        type="password"
+                        placeholder={t('tokenSessionKeyPlaceholder')}
+                        value={sessionKeyInput}
+                        onChange={(e) => setSessionKeyInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveSessionKey(); }}
+                      />
+                      <button className="settings-sub-popup-key-btn" onClick={saveSessionKey}>
+                        {sessionKeySaved ? t('tokenSessionKeySaved') : t('tokenSessionKeySave')}
+                      </button>
                     </div>
                     <button
                       className="settings-sub-popup-item settings-sub-popup-auth"

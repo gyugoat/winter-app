@@ -56,7 +56,11 @@ jobs:
       - name: Cargo check
         run: cargo check
         working-directory: src-tauri
+        env:
+          DISCORD_WEBHOOK_URL: "https://example.com/placeholder"
 
       - name: Clippy
         run: cargo clippy -- -D warnings
         working-directory: src-tauri
+        env:
+          DISCORD_WEBHOOK_URL: "https://example.com/placeholder"

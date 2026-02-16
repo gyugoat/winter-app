@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Winter",
-  "version": "0.2.14",
+  "version": "1.0.0",
   "identifier": "com.gyugo.winter",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.anthropic.com https://console.anthropic.com https://claude.ai https://discord.com https://discordapp.com; font-src 'self' data:"
     }
   },
   "bundle": {

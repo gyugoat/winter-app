@@ -7,7 +7,17 @@ const STORE_FILE = 'sessions.json';
 const STORE_KEY_SESSIONS = 'sessions';
 const STORE_KEY_ACTIVE = 'active_session_id';
 const STORE_KEY_IS_DRAFT = 'is_draft';
+const STORE_KEY_WEEKLY_USAGE = 'weekly_usage';
+const STORE_KEY_WEEKLY_RESET = 'weekly_reset_at';
 const SAVE_DEBOUNCE_MS = 500;
+
+function getWeekStart(): number {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(now.getFullYear(), now.getMonth(), diff, 0, 0, 0, 0);
+  return monday.getTime();
+}
 
 function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -43,6 +53,7 @@ export function useChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [usage, setUsage] = useState<{ input: number; output: number }>({ input: 0, output: 0 });
+  const [weeklyUsage, setWeeklyUsage] = useState<{ input: number; output: number }>({ input: 0, output: 0 });
   const sessionCounter = useRef(0);
   const storeRef = useRef<Store | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,6 +92,16 @@ export function useChat() {
             setActiveSessionId(cleanSessions[cleanSessions.length - 1].id);
             setIsDraft(false);
           }
+        }
+        const weekStart = getWeekStart();
+        const savedReset = await store.get<number>(STORE_KEY_WEEKLY_RESET);
+        if (savedReset && savedReset >= weekStart) {
+          const saved = await store.get<{ input: number; output: number }>(STORE_KEY_WEEKLY_USAGE);
+          if (saved) setWeeklyUsage(saved);
+        } else {
+          await store.set(STORE_KEY_WEEKLY_USAGE, { input: 0, output: 0 });
+          await store.set(STORE_KEY_WEEKLY_RESET, weekStart);
+          await store.save();
         }
       } catch {
         // Store doesn't exist or is corrupt — start fresh
@@ -128,9 +149,12 @@ export function useChat() {
     []
   );
 
+  const cancelledRef = useRef(false);
+
   const streamResponse = useCallback(
     (sessionId: string, allMessages: Message[]) => {
       setIsStreaming(true);
+      cancelledRef.current = false;
 
       const replyId = uid();
       const replyMsg: Message = {
@@ -165,6 +189,7 @@ export function useChat() {
 
       const onEvent = new Channel<ChatStreamEvent>();
       onEvent.onmessage = (event: ChatStreamEvent) => {
+        if (cancelledRef.current) return;
         if (event.event === 'delta') {
           const text = event.data.text;
           updateSession(sessionId, (s) => ({
@@ -206,10 +231,16 @@ export function useChat() {
             }));
           }
         } else if (event.event === 'usage') {
-          setUsage((prev) => ({
-            input: prev.input + event.data.input_tokens,
-            output: prev.output + event.data.output_tokens,
-          }));
+          const delta = { input: event.data.input_tokens, output: event.data.output_tokens };
+          setUsage((prev) => ({ input: prev.input + delta.input, output: prev.output + delta.output }));
+          setWeeklyUsage((prev) => {
+            const next = { input: prev.input + delta.input, output: prev.output + delta.output };
+            if (storeRef.current) {
+              storeRef.current.set(STORE_KEY_WEEKLY_USAGE, next);
+              storeRef.current.save();
+            }
+            return next;
+          });
         } else if (event.event === 'stream_end') {
           updateSession(sessionId, (s) => ({
             ...s,
@@ -297,6 +328,7 @@ export function useChat() {
   }, [isDraft]);
 
   const switchSession = useCallback((id: string) => {
+    cancelledRef.current = true;
     setActiveSessionId(id);
     setIsDraft(false);
   }, []);
@@ -366,6 +398,7 @@ export function useChat() {
     isStreaming,
     loaded,
     usage,
+    weeklyUsage,
     sendMessage,
     addSession,
     switchSession,

@@ -44,6 +44,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     sendMessage,
     isStreaming,
     usage,
+    weeklyUsage,
     addSession,
     switchSession,
     deleteSession,
@@ -167,6 +168,8 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           onSelectSettingsPage={(page) => setSettingsPage(page)}
           onReauth={onReauth ?? (() => {})}
           onShowReadme={onShowReadme ?? (() => {})}
+          usage={usage}
+          weeklyUsage={weeklyUsage}
         />
         <SnowBackground />
         <button
@@ -181,7 +184,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           />
           <span className="chat-brand-dot">.</span>
           {toast && (
-            <span className={`chat-toast${toast.dropping ? ' dropping' : ''}`}>
+            <span role="status" aria-live="polite" className={`chat-toast${toast.dropping ? ' dropping' : ''}`}>
               {toast.text}
             </span>
           )}

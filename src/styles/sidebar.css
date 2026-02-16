@@ -423,6 +423,59 @@ button.settings-sub-popup-item:hover {
   color: var(--accent);
 }
 
+.settings-sub-popup-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.settings-sub-popup-refresh {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.settings-sub-popup-key-row {
+  display: flex;
+  gap: 4px;
+  padding: 4px 10px;
+  align-items: center;
+}
+
+.settings-sub-popup-key-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.settings-sub-popup-key-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-sub-popup-key-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.settings-sub-popup-key-btn:hover {
+  opacity: 0.85;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .settings-popup,
   .settings-sub-popup {

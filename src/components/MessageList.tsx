@@ -74,10 +74,20 @@ function renderMarkdown(content: string): string {
   return DOMPurify.sanitize(raw);
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function highlightText(text: string, query: string): string {
-  if (!query) return text;
+  if (!query) return escapeHtml(text);
+  const safeText = escapeHtml(text);
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(
+  return safeText.replace(
     new RegExp(`(${escaped})`, 'gi'),
     '<mark class="search-highlight">$1</mark>'
   );

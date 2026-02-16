@@ -187,7 +187,9 @@ pub async fn summarize(base_url: &str, model: &str, text: &str) -> Result<String
 
     let client = build_client()?;
     let url = format!("{}/api/generate", base_url);
-    let prompt = format!("Summarize concisely:\n\n{}", text);
+    let prompt = format!("Extract ONLY the key facts and decisions from this conversation. \
+Do NOT list user requests. Do NOT write \"User asked X, then Y\". \
+Output format: what was decided, what was done, what remains. Nothing else.\n\n{}", text);
 
     let body = json!({
         "model": model, "prompt": prompt, "stream": false,
@@ -222,7 +224,7 @@ pub async fn compress_history(base_url: &str, model: &str, messages: &[ChatMessa
     let mut result = Vec::with_capacity(2 + keep);
     result.push(ChatMessage {
         role: "user".to_string(),
-        content: MessageContent::Text(format!("[Summary of {} messages]\n{}", to_compress.len(), summary)),
+        content: MessageContent::Text(format!("[Prior context — {} messages compressed]\n{}", to_compress.len(), summary)),
     });
     result.push(ChatMessage {
         role: "assistant".to_string(),
