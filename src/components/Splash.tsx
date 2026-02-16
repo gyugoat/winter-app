@@ -68,6 +68,8 @@ export function Splash({ onDone, returning = false }: SplashProps) {
     const STACK_Y = cy + 80;
     // Diamond melts snow within this radius
     const MELT_RADIUS = 70;
+    // Max snow accumulation height (~1cm visual = ~38px)
+    const MAX_SNOW_HEIGHT = 38;
 
     const COL_W = 3;
     const COLS = Math.ceil(W / COL_W);
@@ -82,7 +84,7 @@ export function Splash({ onDone, returning = false }: SplashProps) {
     }
 
     const particles: Particle[] = [];
-    const MAX_PARTICLES = 300;
+    const MAX_PARTICLES = 30;
 
     function spawn(startY?: number) {
       particles.push({
@@ -98,7 +100,7 @@ export function Splash({ onDone, returning = false }: SplashProps) {
       });
     }
 
-    for (let i = 0; i < 80; i++) spawn(Math.random() * (STACK_Y - 40));
+    for (let i = 0; i < 20; i++) spawn(Math.random() * (STACK_Y - 40));
 
     let animId: number;
     let spawnAccum = 0;
@@ -117,7 +119,7 @@ export function Splash({ onDone, returning = false }: SplashProps) {
       const clicked = clickedRef.current;
 
       if (!clicked) {
-        spawnAccum += 3.5;
+        spawnAccum += 0.8;
         let active = 0;
         for (let i = 0; i < particles.length; i++) {
           if (!particles[i].settled) active++;
@@ -187,11 +189,11 @@ export function Splash({ onDone, returning = false }: SplashProps) {
             p.y = groundY - p.size;
             p.settled = true;
             const bump = p.size * 0.7;
-            heightMap[col] += bump;
+            heightMap[col] = Math.min(heightMap[col] + bump, MAX_SNOW_HEIGHT);
             for (let d = 1; d <= 2; d++) {
               const falloff = 0.3 / d;
-              if (col - d >= 0) heightMap[col - d] += bump * falloff;
-              if (col + d < COLS) heightMap[col + d] += bump * falloff;
+              if (col - d >= 0) heightMap[col - d] = Math.min(heightMap[col - d] + bump * falloff, MAX_SNOW_HEIGHT);
+              if (col + d < COLS) heightMap[col + d] = Math.min(heightMap[col + d] + bump * falloff, MAX_SNOW_HEIGHT);
             }
             // Stamp settled particle onto offscreen canvas
             offCtx.beginPath();

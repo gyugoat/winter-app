@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';
 import type { SettingsPageId } from './Chat';
@@ -45,6 +45,7 @@ const PAGE_TITLE_KEYS: Record<SettingsPageId, TranslationKey> = {
   language: 'language',
   feedback: 'feedbackTitle',
   archive: 'archiveTitle',
+  ollama: 'ollamaTitle',
 };
 
 function ShortcutsContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
@@ -171,6 +172,7 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
   const [smtpLoaded, setSmtpLoaded] = useState(false);
   const [smtpSaved, setSmtpSaved] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const smtpSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -181,20 +183,26 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
       } catch {}
       setSmtpLoaded(true);
     })();
+    return () => {
+      if (smtpSaveTimer.current) clearTimeout(smtpSaveTimer.current);
+    };
   }, []);
 
-  const saveSmtpPass = async (value: string) => {
+  const saveSmtpPass = (value: string) => {
     setSmtpPass(value);
     setSmtpSaved(false);
-    try {
-      const store = await load('settings.json');
-      await store.set('smtp_app_password', value);
-      await store.save();
-      if (value.trim()) {
-        setSmtpSaved(true);
-        setTimeout(() => setSmtpSaved(false), 2000);
-      }
-    } catch {}
+    if (smtpSaveTimer.current) clearTimeout(smtpSaveTimer.current);
+    smtpSaveTimer.current = setTimeout(async () => {
+      try {
+        const store = await load('settings.json');
+        await store.set('smtp_app_password', value);
+        await store.save();
+        if (value.trim()) {
+          setSmtpSaved(true);
+          setTimeout(() => setSmtpSaved(false), 2000);
+        }
+      } catch {}
+    }, 500);
   };
 
   const handleSend = async (e: React.MouseEvent<HTMLElement>) => {
@@ -265,6 +273,183 @@ function FeedbackContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElemen
         >
           {sending ? t('feedbackSending') : t('feedbackSend')}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function OllamaContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
+  const { t } = useI18n();
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [installState, setInstallState] = useState<'idle' | 'installing' | 'done' | 'failed'>('idle');
+  const [enabled, setEnabled] = useState(false);
+  const [url, setUrl] = useState('http://localhost:11434');
+  const [model, setModel] = useState('qwen2.5:14b');
+  const [models, setModels] = useState<string[]>([]);
+  const [status, setStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+  const [version, setVersion] = useState('');
+
+  const checkConnection = async () => {
+    setStatus('checking');
+    try {
+      const ver: string = await invoke('ollama_check');
+      setVersion(ver);
+      setStatus('connected');
+      try {
+        const modelList: string[] = await invoke('ollama_models');
+        setModels(modelList);
+      } catch {}
+    } catch {
+      setStatus('disconnected');
+      setModels([]);
+    }
+  };
+
+  useEffect(() => {
+    (async () => {
+      const isInstalled: boolean = await invoke('ollama_is_installed');
+      setInstalled(isInstalled);
+      if (!isInstalled) return;
+      try {
+        const store = await load('settings.json');
+        const savedEnabled = await store.get<boolean>('ollama_enabled');
+        const savedUrl = await store.get<string>('ollama_url');
+        const savedModel = await store.get<string>('ollama_model');
+        if (typeof savedEnabled === 'boolean') setEnabled(savedEnabled);
+        if (savedUrl && typeof savedUrl === 'string') setUrl(savedUrl);
+        if (savedModel && typeof savedModel === 'string') setModel(savedModel);
+      } catch {}
+      checkConnection();
+    })();
+  }, []);
+
+  const handleInstall = async (e: React.MouseEvent<HTMLElement>) => {
+    onFlash(e);
+    setInstallState('installing');
+    try {
+      await invoke('ollama_install');
+      setInstallState('done');
+      setInstalled(true);
+      checkConnection();
+    } catch {
+      setInstallState('failed');
+    }
+  };
+
+  const handleToggle = async (e: React.MouseEvent<HTMLElement>) => {
+    onFlash(e);
+    const next = !enabled;
+    setEnabled(next);
+    try { await invoke('ollama_toggle', { enabled: next }); } catch {}
+  };
+
+  const saveConfig = async (newUrl: string, newModel: string) => {
+    try { await invoke('ollama_set_config', { url: newUrl, model: newModel }); } catch {}
+  };
+
+  if (installed === null) {
+    return (
+      <div className="settings-ollama">
+        <div className="settings-card">
+          <span className="settings-card-subtitle">{t('ollamaChecking')}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!installed && installState !== 'done') {
+    return (
+      <div className="settings-ollama">
+        <div className="settings-ollama-install-card">
+          <div className="settings-ollama-install-header">
+            <span className="settings-ollama-install-title">{t('ollamaNotInstalled')}</span>
+            <span className="settings-ollama-badge">{t('ollamaRecommended')}</span>
+          </div>
+          <p className="settings-ollama-install-desc">{t('ollamaInstallDesc')}</p>
+          <div className="settings-ollama-install-actions">
+            {installState === 'installing' ? (
+              <span className="settings-ollama-installing">{t('ollamaInstalling')}</span>
+            ) : installState === 'failed' ? (
+              <>
+                <span className="settings-ollama-install-error">{t('ollamaInstallFailed')}</span>
+                <button className="settings-ollama-install-btn" onClick={handleInstall}>
+                  {t('ollamaInstallYes')}
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="settings-ollama-install-btn primary" onClick={handleInstall}>
+                  {t('ollamaInstallYes')}
+                </button>
+                <button className="settings-ollama-install-btn" onClick={onFlash}>
+                  {t('ollamaInstallCancel')}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-ollama">
+      <button className="settings-card" onClick={handleToggle}>
+        <div className="settings-card-row">
+          <span className="settings-card-title">{t('ollamaEnabled')}</span>
+          <span className={`settings-ollama-toggle${enabled ? ' on' : ''}`}>
+            <span className="settings-ollama-toggle-dot" />
+          </span>
+        </div>
+        <span className="settings-card-subtitle">{t('ollamaSubtitle')}</span>
+      </button>
+
+      <div className="settings-card">
+        <div className="settings-card-row">
+          <span className="settings-card-title">{t('ollamaStatus')}</span>
+          <span className={`settings-ollama-status ${status}`}>
+            {status === 'checking' ? t('ollamaChecking')
+              : status === 'connected' ? `${t('ollamaConnected')} (v${version})`
+              : t('ollamaDisconnected')}
+          </span>
+          <button className="settings-ollama-refresh" onClick={(e) => { onFlash(e); checkConnection(); }}>
+            {t('ollamaRefresh')}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-card">
+        <span className="settings-card-title">{t('ollamaUrl')}</span>
+        <input
+          className="settings-ollama-input"
+          value={url}
+          onChange={(e) => { setUrl(e.target.value); saveConfig(e.target.value, model); }}
+          placeholder="http://localhost:11434"
+        />
+      </div>
+
+      <div className="settings-card">
+        <span className="settings-card-title">{t('ollamaModel')}</span>
+        {models.length > 0 ? (
+          <div className="settings-ollama-models">
+            {models.map((m) => (
+              <button
+                key={m}
+                className={`settings-ollama-model-btn${m === model ? ' active' : ''}`}
+                onClick={(e) => { onFlash(e); setModel(m); saveConfig(url, m); }}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <input
+            className="settings-ollama-input"
+            value={model}
+            onChange={(e) => { setModel(e.target.value); saveConfig(url, e.target.value); }}
+            placeholder="qwen2.5:14b"
+          />
+        )}
       </div>
     </div>
   );
@@ -394,6 +579,8 @@ export function SettingsPage({ page, onClose, sessions, onSwitchSession }: Setti
         return <LanguageContent onFlash={onFlash} />;
       case 'feedback':
         return <FeedbackContent onFlash={onFlash} />;
+      case 'ollama':
+        return <OllamaContent onFlash={onFlash} />;
       case 'archive':
         return (
           <ArchiveContent

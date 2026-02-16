@@ -20,4 +20,5 @@ export type ChatStreamEvent =
   | { event: 'tool_start'; data: { name: string; id: string } }
   | { event: 'tool_end'; data: { id: string; result: string } }
   | { event: 'stream_end' }
-  | { event: 'error'; data: { message: string } };
+  | { event: 'error'; data: { message: string } }
+  | { event: 'ollama_status'; data: { status: string } };

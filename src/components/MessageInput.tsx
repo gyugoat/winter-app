@@ -39,6 +39,7 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
   }, [text, onSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();

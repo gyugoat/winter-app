@@ -1,3 +1,5 @@
+mod ollama;
+
 use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -97,6 +99,8 @@ pub enum ChatStreamEvent {
     StreamEnd,
     #[serde(rename = "error")]
     Error { message: String },
+    #[serde(rename = "ollama_status")]
+    OllamaStatus { status: String },
 }
 
 fn tool_definitions() -> Value {
@@ -580,6 +584,47 @@ async fn send_feedback(app: AppHandle, text: String) -> Result<(), String> {
     Ok(())
 }
 
+// ── Ollama Commands ────────────────────────────────────────────────
+
+#[tauri::command]
+async fn ollama_is_installed() -> bool {
+    ollama::is_installed().await
+}
+
+#[tauri::command]
+async fn ollama_install() -> Result<String, String> {
+    ollama::install().await
+}
+
+#[tauri::command]
+async fn ollama_check(app: AppHandle) -> Result<String, String> {
+    let settings = ollama::get_settings(&app);
+    ollama::check_health(&settings.base_url).await
+}
+
+#[tauri::command]
+async fn ollama_models(app: AppHandle) -> Result<Vec<String>, String> {
+    let settings = ollama::get_settings(&app);
+    ollama::list_models(&settings.base_url).await
+}
+
+#[tauri::command]
+async fn ollama_toggle(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    store.set("ollama_enabled", serde_json::json!(enabled));
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn ollama_set_config(app: AppHandle, url: String, model: String) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    store.set("ollama_url", serde_json::json!(url));
+    store.set("ollama_model", serde_json::json!(model));
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── Chat Streaming Command ────────────────────────────────────────
 
 #[tauri::command]
@@ -603,6 +648,26 @@ async fn chat_send(
 
     let system_prompt = build_system_prompt(&app);
     let mut conversation: Vec<ChatMessage> = messages;
+
+    let ollama_settings = ollama::get_settings(&app);
+
+    if ollama_settings.enabled && conversation.len() > 10 {
+        let _ = on_event.send(ChatStreamEvent::OllamaStatus {
+            status: "compressing".to_string(),
+        });
+        if let Ok(compressed) = ollama::compress_history(
+            &ollama_settings.base_url,
+            &ollama_settings.model,
+            &conversation,
+        )
+        .await
+        {
+            conversation = compressed;
+        }
+        let _ = on_event.send(ChatStreamEvent::OllamaStatus {
+            status: "done".to_string(),
+        });
+    }
 
     for _round in 0..MAX_TOOL_ROUNDS {
         if abort_flag.load(Ordering::SeqCst) {
@@ -639,7 +704,24 @@ async fn chat_send(
             for (id, name, input_json) in &result.tool_uses {
                 let input: Value =
                     serde_json::from_str(input_json).unwrap_or(json!({}));
-                let (output, is_error) = execute_tool(name, &input).await;
+                let (raw_output, is_error) = execute_tool(name, &input).await;
+                let output = if ollama_settings.enabled && !is_error && raw_output.len() > 3000 {
+                    let _ = on_event.send(ChatStreamEvent::OllamaStatus {
+                        status: "summarizing".to_string(),
+                    });
+                    match ollama::summarize(
+                        &ollama_settings.base_url,
+                        &ollama_settings.model,
+                        &raw_output,
+                    )
+                    .await
+                    {
+                        Ok(summary) => format!("[Summarized by local LLM]\n{}", summary),
+                        Err(_) => raw_output,
+                    }
+                } else {
+                    raw_output
+                };
                 let _ = on_event.send(ChatStreamEvent::ToolEnd {
                     id: id.clone(),
                     result: output.clone(),
@@ -681,6 +763,12 @@ pub fn run() {
             chat_send,
             send_feedback,
             abort_stream,
+            ollama_is_installed,
+            ollama_install,
+            ollama_check,
+            ollama_models,
+            ollama_toggle,
+            ollama_set_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

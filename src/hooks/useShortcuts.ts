@@ -55,6 +55,7 @@ export function useShortcuts(actions: ShortcutActions) {
 
   useEffect(() => {
     const handler = async (e: KeyboardEvent) => {
+      if (e.isComposing || e.keyCode === 229) return;
       const ctrl = e.ctrlKey || e.metaKey;
 
       if (e.key === 'Escape') {
@@ -114,8 +115,8 @@ export function useShortcuts(actions: ShortcutActions) {
       }
     };
 
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, [actions]);
 
   return {

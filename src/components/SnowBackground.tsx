@@ -1,10 +1,17 @@
 import { useEffect, useRef } from 'react';
 
-export function SnowBackground() {
+interface SnowBackgroundProps {
+  idle?: boolean;
+}
+
+export function SnowBackground({ idle = false }: SnowBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startTimeRef = useRef<number>(0);
+  const idleRef = useRef(idle);
+  idleRef.current = idle;
 
   useEffect(() => {
+    startTimeRef.current = 0;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -15,10 +22,11 @@ export function SnowBackground() {
     let animId: number;
 
     const FLAKE_COUNT = 20;
-    const BUCKET_WIDTH = 10;
-    const MAX_PER_BUCKET = 3;
     const TOTAL_STAGES = 20;
     const STAGE_DURATION_SEC = 30;
+    const SNOW_LAYER_HEIGHT = 8;
+
+    let snowLayerFill = 0;
 
     const flakes: Array<{
       x: number; y: number;
@@ -26,8 +34,6 @@ export function SnowBackground() {
       drift: number; opacity: number;
       wobble: number; wobbleSpeed: number;
     }> = [];
-
-    const groundBuckets: Map<number, number> = new Map();
 
     function resize() {
       W = canvas!.clientWidth;
@@ -66,106 +72,176 @@ export function SnowBackground() {
       return m ? [+m[1], +m[2], +m[3]] : [200, 220, 255];
     }
 
-    function getBucketIndex(x: number): number {
-      return Math.floor(x / BUCKET_WIDTH);
+    function drawGroundSnow(c: CanvasRenderingContext2D, r: number, g: number, b: number, layerH: number) {
+      if (layerH <= 0) return;
+      const y = H - layerH;
+      const grad = c.createLinearGradient(0, y, 0, H);
+      grad.addColorStop(0, `rgba(${r},${g},${b},0.15)`);
+      grad.addColorStop(0.3, `rgba(${r},${g},${b},0.25)`);
+      grad.addColorStop(1, `rgba(${r},${g},${b},0.35)`);
+      c.fillStyle = grad;
+
+      c.beginPath();
+      c.moveTo(0, H);
+      for (let x = 0; x <= W; x += 20) {
+        const wave = Math.sin(x * 0.02) * 1.5 + Math.sin(x * 0.05 + 1) * 0.8;
+        c.lineTo(x, y + wave);
+      }
+      c.lineTo(W, H);
+      c.closePath();
+      c.fill();
     }
 
+    // Olaf-like: pear body, small head, twig arms with branches, carrot nose, smile, hair tufts
     function drawSnowman(c: CanvasRenderingContext2D, stage: number, stageProgress: number) {
       if (stage < 0) return;
 
       const [r, g, b] = parseRgb(snowRgb);
-      const snowmanX = W * 0.85;
-      const groundY = H;
+      const snowmanX = W * 0.82;
+      const groundY = H - SNOW_LAYER_HEIGHT;
 
-      const bodyBottomR = 30;
-      const bodyMiddleR = 22;
-      const headR = 16;
-      const bodyBottomY = groundY - bodyBottomR;
-      const bodyMiddleY = bodyBottomY - bodyBottomR - bodyMiddleR + 5;
-      const headY = bodyMiddleY - bodyMiddleR - headR + 3;
-
-      // stage 0-6: bottom, 7-10: middle, 11-14: head, 15-17: arms, 18-19: face
+      // stage 0-6: body, 7-11: head, 12-15: arms, 16-19: face
       const progress = stage + stageProgress;
       const bodyOpacity = Math.min(1, Math.max(0, progress / 7));
-      const middleOpacity = Math.min(1, Math.max(0, (progress - 7) / 4));
-      const headOpacity = Math.min(1, Math.max(0, (progress - 11) / 4));
-      const armsOpacity = Math.min(1, Math.max(0, (progress - 15) / 3));
-      const faceOpacity = Math.min(1, Math.max(0, (progress - 18) / 2));
+      const headOpacity = Math.min(1, Math.max(0, (progress - 7) / 5));
+      const armsOpacity = Math.min(1, Math.max(0, (progress - 12) / 4));
+      const faceOpacity = Math.min(1, Math.max(0, (progress - 16) / 4));
 
       if (bodyOpacity > 0) {
+        c.save();
+        c.globalAlpha = bodyOpacity * 0.9;
+        c.fillStyle = `rgb(${r},${g},${b})`;
         c.beginPath();
-        c.arc(snowmanX, bodyBottomY, bodyBottomR, 0, Math.PI * 2);
-        c.fillStyle = `rgba(${r},${g},${b},${bodyOpacity * 0.9})`;
+        c.ellipse(snowmanX, groundY - 22, 28, 22, 0, 0, Math.PI * 2);
         c.fill();
+        c.restore();
       }
 
-      if (middleOpacity > 0) {
-        c.beginPath();
-        c.arc(snowmanX, bodyMiddleY, bodyMiddleR, 0, Math.PI * 2);
-        c.fillStyle = `rgba(${r},${g},${b},${middleOpacity * 0.9})`;
-        c.fill();
-      }
+      const bodyTopY = groundY - 42;
+      const headR = 14;
+      const headY = bodyTopY - headR + 4;
 
       if (headOpacity > 0) {
+        c.save();
+        c.globalAlpha = headOpacity * 0.9;
+        c.fillStyle = `rgb(${r},${g},${b})`;
         c.beginPath();
         c.arc(snowmanX, headY, headR, 0, Math.PI * 2);
-        c.fillStyle = `rgba(${r},${g},${b},${headOpacity * 0.9})`;
         c.fill();
+        c.restore();
       }
 
       if (armsOpacity > 0) {
-        c.strokeStyle = `rgba(80,60,40,${armsOpacity})`;
+        c.save();
+        c.globalAlpha = armsOpacity;
+        c.strokeStyle = 'rgba(90,60,30,1)';
         c.lineWidth = 2;
+        c.lineCap = 'round';
+
+        const armY = groundY - 30;
+
         c.beginPath();
-        c.moveTo(snowmanX - bodyMiddleR, bodyMiddleY);
-        c.lineTo(snowmanX - bodyMiddleR - 20, bodyMiddleY - 15);
+        c.moveTo(snowmanX - 26, armY);
+        c.lineTo(snowmanX - 50, armY - 18);
         c.stroke();
         c.beginPath();
-        c.moveTo(snowmanX + bodyMiddleR, bodyMiddleY);
-        c.lineTo(snowmanX + bodyMiddleR + 20, bodyMiddleY - 15);
+        c.moveTo(snowmanX - 42, armY - 12);
+        c.lineTo(snowmanX - 48, armY - 22);
         c.stroke();
+        c.beginPath();
+        c.moveTo(snowmanX - 44, armY - 14);
+        c.lineTo(snowmanX - 52, armY - 12);
+        c.stroke();
+
+        c.beginPath();
+        c.moveTo(snowmanX + 26, armY);
+        c.lineTo(snowmanX + 50, armY - 18);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(snowmanX + 42, armY - 12);
+        c.lineTo(snowmanX + 48, armY - 22);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(snowmanX + 44, armY - 14);
+        c.lineTo(snowmanX + 52, armY - 12);
+        c.stroke();
+
+        c.restore();
       }
 
       if (faceOpacity > 0) {
-        c.fillStyle = `rgba(30,30,30,${faceOpacity})`;
+        c.save();
+        c.globalAlpha = faceOpacity;
+
+        c.fillStyle = '#1a1a1a';
         c.beginPath();
-        c.arc(snowmanX - 6, headY - 3, 2, 0, Math.PI * 2);
+        c.arc(snowmanX - 5, headY - 3, 2.2, 0, Math.PI * 2);
         c.fill();
         c.beginPath();
-        c.arc(snowmanX + 6, headY - 3, 2, 0, Math.PI * 2);
+        c.arc(snowmanX + 5, headY - 3, 2.2, 0, Math.PI * 2);
         c.fill();
 
-        c.fillStyle = `rgba(255,140,0,${faceOpacity})`;
+        c.fillStyle = '#e87400';
         c.beginPath();
-        c.moveTo(snowmanX, headY + 2);
-        c.lineTo(snowmanX + 12, headY + 2);
-        c.lineTo(snowmanX + 6, headY + 5);
+        c.moveTo(snowmanX, headY + 1);
+        c.lineTo(snowmanX + 14, headY + 3);
+        c.lineTo(snowmanX, headY + 5);
         c.closePath();
         c.fill();
 
-        c.fillStyle = `rgba(30,30,30,${faceOpacity})`;
+        c.strokeStyle = '#1a1a1a';
+        c.lineWidth = 1.2;
         c.beginPath();
-        c.arc(snowmanX, bodyBottomY - 15, 2.5, 0, Math.PI * 2);
-        c.fill();
+        c.arc(snowmanX, headY + 8, 4, 0.1, Math.PI - 0.1);
+        c.stroke();
+
+        c.fillStyle = '#1a1a1a';
+        for (let i = 0; i < 3; i++) {
+          c.beginPath();
+          c.arc(snowmanX, groundY - 32 + i * 8, 2, 0, Math.PI * 2);
+          c.fill();
+        }
+
+        c.strokeStyle = 'rgba(90,60,30,1)';
+        c.lineWidth = 2;
+        c.lineCap = 'round';
         c.beginPath();
-        c.arc(snowmanX, bodyBottomY - 5, 2.5, 0, Math.PI * 2);
-        c.fill();
+        c.moveTo(snowmanX - 2, headY - headR);
+        c.lineTo(snowmanX - 4, headY - headR - 8);
+        c.stroke();
         c.beginPath();
-        c.arc(snowmanX, bodyBottomY + 5, 2.5, 0, Math.PI * 2);
-        c.fill();
+        c.moveTo(snowmanX + 1, headY - headR);
+        c.lineTo(snowmanX + 3, headY - headR - 7);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(snowmanX, headY - headR - 1);
+        c.lineTo(snowmanX, headY - headR - 9);
+        c.stroke();
+
+        c.restore();
       }
     }
 
     let lastTime = 0;
+    let lastDrawTime = 0;
     const TARGET_FPS = 60;
     const FRAME_MS = 1000 / TARGET_FPS;
+    const MIN_FRAME_INTERVAL = FRAME_MS * 0.9;
 
     function draw(now: number) {
+      animId = requestAnimationFrame(draw);
+
       if (!startTimeRef.current) startTimeRef.current = now;
       if (!lastTime) lastTime = now;
+
+      const elapsed = now - lastDrawTime;
+      if (lastDrawTime && elapsed < MIN_FRAME_INTERVAL) return;
+
       const dt = Math.min(now - lastTime, 100) / FRAME_MS;
       lastTime = now;
+      lastDrawTime = now;
 
+      const isIdle = idleRef.current;
       const elapsedSec = (now - startTimeRef.current) / 1000;
       const currentStage = Math.min(Math.floor(elapsedSec / STAGE_DURATION_SEC), TOTAL_STAGES);
       const stageProgress = currentStage < TOTAL_STAGES ? (elapsedSec % STAGE_DURATION_SEC) / STAGE_DURATION_SEC : 1;
@@ -173,26 +249,14 @@ export function SnowBackground() {
       ctx!.clearRect(0, 0, W, H);
       const [r, g, b] = parseRgb(snowRgb);
 
-      for (const [bucketIdx, count] of groundBuckets.entries()) {
-        const bucketX = bucketIdx * BUCKET_WIDTH + BUCKET_WIDTH / 2;
-        for (let i = 0; i < count; i++) {
-          ctx!.beginPath();
-          ctx!.arc(bucketX, H - 2 - i * 3, 1.5, 0, Math.PI * 2);
-          ctx!.fillStyle = `rgba(${r},${g},${b},0.3)`;
-          ctx!.fill();
-        }
-      }
-
       for (const f of flakes) {
         f.y += f.speed * dt;
         f.wobble = (f.wobble + f.wobbleSpeed * dt) % (Math.PI * 2);
         f.x += (f.drift + Math.sin(f.wobble) * 0.3) * dt;
 
-        if (f.y >= H - 5) {
-          const bucketIdx = getBucketIndex(f.x);
-          const currentCount = groundBuckets.get(bucketIdx) || 0;
-          if (currentCount < MAX_PER_BUCKET) {
-            groundBuckets.set(bucketIdx, currentCount + 1);
+        if (f.y >= H) {
+          if (isIdle && snowLayerFill < 1) {
+            snowLayerFill = Math.min(1, snowLayerFill + 0.005 * dt);
           }
           f.y = -5;
           f.x = Math.random() * W;
@@ -207,14 +271,15 @@ export function SnowBackground() {
         ctx!.fill();
       }
 
-      drawSnowman(ctx!, currentStage, stageProgress);
-
-      animId = requestAnimationFrame((t) => draw(t));
+      if (isIdle && snowLayerFill > 0) {
+        drawGroundSnow(ctx!, r, g, b, SNOW_LAYER_HEIGHT * snowLayerFill);
+        drawSnowman(ctx!, currentStage, stageProgress);
+      }
     }
 
     resize();
     initFlakes();
-    animId = requestAnimationFrame(draw);
+    animId = requestAnimationFrame((t) => draw(t));
 
     const onResize = () => { resize(); };
     window.addEventListener('resize', onResize);

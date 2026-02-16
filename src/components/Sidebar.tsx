@@ -80,6 +80,14 @@ const MENU_ICONS = {
       <circle cx="12" cy="7" r="4" />
     </svg>
   ),
+  ollama: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <circle cx="9" cy="10" r="1.5" />
+      <circle cx="15" cy="10" r="1.5" />
+      <path d="M9 15h6" />
+    </svg>
+  ),
   howToUse: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
@@ -250,6 +258,7 @@ export function Sidebar({
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={commitRename}
                   onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                     if (e.key === 'Enter') commitRename();
                     if (e.key === 'Escape') setRenamingId(null);
                   }}
@@ -409,6 +418,20 @@ export function Sidebar({
               >
                 <span className="settings-popup-icon">{MENU_ICONS.archive}</span>
                 <span className="settings-popup-label">{t('archive')}</span>
+                <span className="settings-popup-chevron">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
+              </button>
+
+              <button
+                className="settings-popup-item"
+                onClick={(e) => { onFlash(e); handleSubPage('ollama'); }}
+                role="menuitem"
+              >
+                <span className="settings-popup-icon">{MENU_ICONS.ollama}</span>
+                <span className="settings-popup-label">{t('ollamaTitle')}</span>
                 <span className="settings-popup-chevron">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />

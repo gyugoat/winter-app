@@ -179,6 +179,19 @@ export function useChat() {
               m.id === replyId ? { ...m, content: m.content + block } : m
             ),
           }));
+        } else if (event.event === 'ollama_status') {
+          const st = event.data.status;
+          const label = st === 'compressing' ? '\n*Compressing conversation history...*\n'
+            : st === 'summarizing' ? '\n*Summarizing tool output...*\n'
+            : '';
+          if (label) {
+            updateSession(sessionId, (s) => ({
+              ...s,
+              messages: s.messages.map((m) =>
+                m.id === replyId ? { ...m, content: m.content + label } : m
+              ),
+            }));
+          }
         } else if (event.event === 'stream_end') {
           updateSession(sessionId, (s) => ({
             ...s,
@@ -229,7 +242,10 @@ export function useChat() {
 
       if (isDraft) {
         sessionCounter.current += 1;
-        const sessionName = text.length > 25 ? text.slice(0, 25).trim() + '...' : text;
+        const trimmed = text.trim();
+        const sessionName = trimmed.length === 0
+          ? `Session ${sessionCounter.current}`
+          : trimmed.length > 25 ? trimmed.slice(0, 25) + '...' : trimmed;
         const newSession = createSession(sessionName);
         newSession.messages = [userMsg];
         setSessions((prev) => [...prev, newSession]);
@@ -294,19 +310,22 @@ export function useChat() {
 
   const archiveSession = useCallback(
     (id: string) => {
-      updateSession(id, (s) => ({ ...s, archived: true }));
-      if (id === activeSessionId) {
-        const remaining = sessions.filter((s) => s.id !== id && !s.archived);
-        if (remaining.length > 0) {
-          setActiveSessionId(remaining[0].id);
-          setIsDraft(false);
-        } else {
-          setActiveSessionId(null);
-          setIsDraft(true);
+      setSessions((prev) => {
+        const next = prev.map((s) => (s.id === id ? { ...s, archived: true } : s));
+        if (id === activeSessionId) {
+          const remaining = next.filter((s) => !s.archived);
+          if (remaining.length > 0) {
+            setActiveSessionId(remaining[0].id);
+            setIsDraft(false);
+          } else {
+            setActiveSessionId(null);
+            setIsDraft(true);
+          }
         }
-      }
+        return next;
+      });
     },
-    [updateSession, activeSessionId, sessions]
+    [activeSessionId]
   );
 
   const activeSessions = sessions.filter((s) => !s.archived);

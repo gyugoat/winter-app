@@ -4,6 +4,7 @@ import { Splash } from './components/Splash';
 import { Readme } from './components/Readme';
 import { Auth } from './components/Auth';
 import { Chat } from './components/Chat';
+import { IdleScreen } from './components/IdleScreen';
 import { Titlebar } from './components/Titlebar';
 import { useAuth } from './hooks/useAuth';
 import { useIdle } from './hooks/useIdle';
@@ -11,12 +12,11 @@ import './styles/global.css';
 
 type AppPhase = 'splash' | 'readme' | 'auth' | 'chat';
 
-const IDLE_TIMEOUT = 3 * 60 * 1000;
+const IDLE_TIMEOUT = 5 * 60 * 1000;
 
 function App() {
   const { isAuthenticated, getAuthorizeUrl, exchangeCode, loading } = useAuth();
   const [phase, setPhase] = useState<AppPhase>('splash');
-  const [returning, setReturning] = useState(false);
   const [readmeSeen, setReadmeSeen] = useState<boolean | null>(null);
   const [idle, wake] = useIdle(IDLE_TIMEOUT);
   const prevPhase = useRef<AppPhase>('splash');
@@ -33,13 +33,7 @@ function App() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (idle && phase === 'chat') {
-      prevPhase.current = 'chat';
-      setReturning(true);
-      setPhase('splash');
-    }
-  }, [idle, phase]);
+  const showIdle = idle && phase === 'chat';
 
   const goToNextAfterReadme = useCallback(() => {
     if (loading) {
@@ -51,15 +45,12 @@ function App() {
 
   const handleSplashDone = useCallback(() => {
     wake();
-    if (returning) {
-      setReturning(false);
-      setPhase(prevPhase.current);
-    } else if (readmeSeen === false) {
+    if (readmeSeen === false) {
       setPhase('readme');
     } else if (readmeSeen === true) {
       goToNextAfterReadme();
     }
-  }, [readmeSeen, returning, wake, goToNextAfterReadme]);
+  }, [readmeSeen, wake, goToNextAfterReadme]);
 
   const handleReadmeDone = useCallback(() => {
     setReadmeSeen(true);
@@ -84,7 +75,7 @@ function App() {
   );
 
   if (phase === 'splash') {
-    return <Splash onDone={handleSplashDone} returning={returning} />;
+    return <Splash onDone={handleSplashDone} />;
   }
 
   if (phase === 'readme') {
@@ -104,7 +95,12 @@ function App() {
     );
   }
 
-  return <Chat onReauth={() => setPhase('auth')} onShowReadme={handleShowReadme} />;
+  return (
+    <>
+      <Chat onReauth={() => setPhase('auth')} onShowReadme={handleShowReadme} />
+      {showIdle && <IdleScreen onWake={wake} />}
+    </>
+  );
 }
 
 export default App;

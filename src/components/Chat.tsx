@@ -13,7 +13,7 @@ import { useI18n } from '../i18n';
 import type { TranslationKey } from '../i18n';
 import '../styles/chat.css';
 
-export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive';
+export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive' | 'ollama';
 
 interface ChatProps {
   onReauth?: () => void;
@@ -58,6 +58,12 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
       toastTimerRef.current = setTimeout(() => setToast(null), TOAST_DROP_MS);
     }, TOAST_VISIBLE_MS);
   }, [t]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const shortcutActions = useMemo(() => ({
     onNewSession: () => { addSession(); setSettingsPage(null); showToast('toastNewSession'); },
