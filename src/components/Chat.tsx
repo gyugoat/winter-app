@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Titlebar } from './Titlebar';
 import { Sidebar } from './Sidebar';
@@ -41,12 +41,17 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     activeSessionId,
     sendMessage,
     isStreaming,
+    usage,
     addSession,
     switchSession,
     deleteSession,
     renameSession,
     archiveSession,
   } = useChat();
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +68,17 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
+  }, []);
+
+  const toggleSearch = useCallback(() => {
+    setSearchOpen((prev) => {
+      if (!prev) {
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      } else {
+        setSearchQuery('');
+      }
+      return !prev;
+    });
   }, []);
 
   const shortcutActions = useMemo(() => ({
@@ -90,17 +106,18 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     onAttachFile: () => fileInputRef.current?.click(),
     onStopStreaming: () => { invoke('abort_stream').catch(() => {}); },
     onFocusInput: () => inputFocusRef.current(),
+    onSearch: toggleSearch,
     isStreaming,
     sessions,
     activeSessionId,
-  }), [addSession, sessions, activeSessionId, switchSession, deleteSession, archiveSession, isStreaming, showToast]);
+  }), [addSession, sessions, activeSessionId, switchSession, deleteSession, archiveSession, isStreaming, showToast, toggleSearch]);
 
   const { addToHistory, getPreviousSent, getNextSent, resetHistoryIndex } = useShortcuts(shortcutActions);
 
-  const handleSendMessage = useCallback((text: string) => {
+  const handleSendMessage = useCallback((text: string, images?: import('../types').ImageAttachment[]) => {
     addToHistory(text);
     resetHistoryIndex();
-    sendMessage(text);
+    sendMessage(text, images);
   }, [sendMessage, addToHistory, resetHistoryIndex]);
 
   const triggerDiamondGlow = useCallback(() => {
@@ -164,7 +181,35 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
               {toast.text}
             </span>
           )}
+          {(usage.input > 0 || usage.output > 0) && (
+            <span className="chat-usage">
+              {usage.input.toLocaleString()} / {usage.output.toLocaleString()}
+            </span>
+          )}
         </button>
+        {searchOpen && (
+          <div className="chat-search-bar">
+            <svg className="chat-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              ref={searchInputRef}
+              className="chat-search-input"
+              type="text"
+              placeholder={t('searchPlaceholder')}
+              value={searchQuery}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); } }}
+            />
+            <button className="chat-search-close" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        )}
         {settingsPage !== null ? (
           <SettingsPage
             page={settingsPage}
@@ -174,7 +219,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           />
         ) : (
           <>
-            <MessageList messages={activeSession.messages} />
+            <MessageList messages={activeSession.messages} searchQuery={searchQuery} />
             <MessageInput
               onSend={handleSendMessage}
               disabled={isStreaming}

@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { load, type Store } from '@tauri-apps/plugin-store';
-import type { Message, Session, ChatStreamEvent } from '../types';
+import type { Message, Session, ChatStreamEvent, ImageAttachment } from '../types';
 
 const STORE_FILE = 'sessions.json';
 const STORE_KEY_SESSIONS = 'sessions';
@@ -42,6 +42,7 @@ export function useChat() {
   const [isDraft, setIsDraft] = useState(true);
   const [isStreaming, setIsStreaming] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [usage, setUsage] = useState<{ input: number; output: number }>({ input: 0, output: 0 });
   const sessionCounter = useRef(0);
   const storeRef = useRef<Store | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -145,10 +146,22 @@ export function useChat() {
         messages: [...s.messages, replyMsg],
       }));
 
-      const apiMessages = allMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      const apiMessages = allMessages.map((m) => {
+        if (m.images && m.images.length > 0) {
+          const blocks: Array<
+            | { type: 'image'; source: { type: string; media_type: string; data: string } }
+            | { type: 'text'; text: string }
+          > = m.images.map((img) => ({
+            type: 'image' as const,
+            source: { type: 'base64', media_type: img.mediaType, data: img.data },
+          }));
+          if (m.content) {
+            blocks.push({ type: 'text', text: m.content });
+          }
+          return { role: m.role, content: blocks };
+        }
+        return { role: m.role, content: m.content };
+      });
 
       const onEvent = new Channel<ChatStreamEvent>();
       onEvent.onmessage = (event: ChatStreamEvent) => {
@@ -192,6 +205,11 @@ export function useChat() {
               ),
             }));
           }
+        } else if (event.event === 'usage') {
+          setUsage((prev) => ({
+            input: prev.input + event.data.input_tokens,
+            output: prev.output + event.data.output_tokens,
+          }));
         } else if (event.event === 'stream_end') {
           updateSession(sessionId, (s) => ({
             ...s,
@@ -230,7 +248,7 @@ export function useChat() {
   );
 
   const sendMessage = useCallback(
-    (text: string) => {
+    (text: string, images?: ImageAttachment[]) => {
       if (isStreaming) return;
 
       const userMsg: Message = {
@@ -238,6 +256,7 @@ export function useChat() {
         role: 'user',
         content: text,
         timestamp: Date.now(),
+        images: images && images.length > 0 ? images : undefined,
       };
 
       if (isDraft) {
@@ -346,6 +365,7 @@ export function useChat() {
     isDraft,
     isStreaming,
     loaded,
+    usage,
     sendMessage,
     addSession,
     switchSession,

@@ -263,6 +263,9 @@ fn extract_text_content(content: &MessageContent) -> String {
                     ContentBlock::ToolUse { name, .. } => {
                         parts.push(format!("[called tool: {}]", name));
                     }
+                    ContentBlock::Image { .. } => {
+                        parts.push("[image]".to_string());
+                    }
                 }
             }
             parts.join("\n")

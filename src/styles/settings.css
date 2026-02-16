@@ -591,6 +591,36 @@
   color: var(--danger-text);
 }
 
+/* ── Model selector ── */
+
+.settings-model-list {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.settings-model-btn {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: all 0.15s;
+}
+
+.settings-model-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-model-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+
 /* ── Responsive ── */
 
 @media (max-width: 768px) {

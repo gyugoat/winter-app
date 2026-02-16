@@ -114,6 +114,13 @@ export const en = {
   ollamaInstalling: 'Installing...',
   ollamaInstallDone: 'Installed!',
   ollamaInstallFailed: 'Installation failed',
+  searchPlaceholder: 'Search messages...',
+  shortcutSearch: 'Search messages',
+  modelTitle: 'Model',
+  modelSubtitle: 'Select the Claude model for conversations',
+  modelOpus: 'Opus',
+  modelSonnet: 'Sonnet',
+  modelHaiku: 'Haiku',
 } as const;
 
 export type TranslationKey = keyof typeof en;

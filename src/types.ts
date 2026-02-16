@@ -1,9 +1,15 @@
+export interface ImageAttachment {
+  mediaType: string;
+  data: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
   isStreaming?: boolean;
+  images?: ImageAttachment[];
 }
 
 export interface Session {
@@ -21,4 +27,5 @@ export type ChatStreamEvent =
   | { event: 'tool_end'; data: { id: string; result: string } }
   | { event: 'stream_end' }
   | { event: 'error'; data: { message: string } }
-  | { event: 'ollama_status'; data: { status: string } };
+  | { event: 'ollama_status'; data: { status: string } }
+  | { event: 'usage'; data: { input_tokens: number; output_tokens: number } };

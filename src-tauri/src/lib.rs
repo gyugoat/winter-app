@@ -19,7 +19,8 @@ const TOKEN_URL: &str = "https://console.anthropic.com/v1/oauth/token";
 const REDIRECT_URI: &str = "https://console.anthropic.com/oauth/code/callback";
 const CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
-const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL: &str = "claude-opus-4-20250514";
+const STORE_KEY_MODEL: &str = "claude_model";
 const DEFAULT_MAX_TOKENS: u32 = 16384;
 const MAX_TOOL_ROUNDS: usize = 25;
 
@@ -35,6 +36,15 @@ Use them when the user asks you to do something on their computer. \
 You have personality. You're not a search engine. You're Winter.";
 
 const STORE_KEY_MBTI_MODIFIER: &str = "mbti_prompt_modifier";
+
+fn get_model(app: &AppHandle) -> String {
+    app.store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get(STORE_KEY_MODEL))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_MODEL.to_string())
+}
 
 fn build_system_prompt(app: &AppHandle) -> String {
     let modifier = app
@@ -59,10 +69,20 @@ pub enum MessageContent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ImageSource {
+    #[serde(rename = "type")]
+    pub source_type: String,
+    pub media_type: String,
+    pub data: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum ContentBlock {
     #[serde(rename = "text")]
     Text { text: String },
+    #[serde(rename = "image")]
+    Image { source: ImageSource },
     #[serde(rename = "tool_use")]
     ToolUse {
         id: String,
@@ -101,6 +121,11 @@ pub enum ChatStreamEvent {
     Error { message: String },
     #[serde(rename = "ollama_status")]
     OllamaStatus { status: String },
+    #[serde(rename = "usage")]
+    Usage {
+        input_tokens: u64,
+        output_tokens: u64,
+    },
 }
 
 fn tool_definitions() -> Value {
@@ -249,9 +274,10 @@ async fn stream_response(
     on_event: &Channel<ChatStreamEvent>,
     system_prompt: &str,
     abort_flag: &AtomicBool,
+    model: &str,
 ) -> Result<StreamedResponse, String> {
     let body = json!({
-        "model": DEFAULT_MODEL,
+        "model": model,
         "max_tokens": DEFAULT_MAX_TOKENS,
         "messages": messages,
         "stream": true,
@@ -275,6 +301,9 @@ async fn stream_response(
     if !response.status().is_success() {
         let status = response.status();
         let body_text = response.text().await.unwrap_or_default();
+        if status.as_u16() == 401 {
+            return Err("AUTH_EXPIRED".to_string());
+        }
         return Err(format!("Claude API error {}: {}", status, body_text));
     }
 
@@ -287,6 +316,9 @@ async fn stream_response(
     let mut current_tool_name = String::new();
     let mut current_tool_input_json = String::new();
     let mut stop_reason = String::new();
+    let mut input_tokens: u64 = 0;
+    #[allow(unused_assignments)]
+    let mut output_tokens: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
         if abort_flag.load(Ordering::SeqCst) {
@@ -315,6 +347,13 @@ async fn stream_response(
             }
 
             match event_type.as_str() {
+                "message_start" => {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(&data) {
+                        if let Some(tokens) = parsed["message"]["usage"]["input_tokens"].as_u64() {
+                            input_tokens += tokens;
+                        }
+                    }
+                }
                 "content_block_start" => {
                     if let Ok(parsed) = serde_json::from_str::<Value>(&data) {
                         let block = &parsed["content_block"];
@@ -371,6 +410,13 @@ async fn stream_response(
                             parsed["delta"]["stop_reason"].as_str()
                         {
                             stop_reason = sr.to_string();
+                        }
+                        if let Some(tokens) = parsed["usage"]["output_tokens"].as_u64() {
+                            output_tokens = tokens;
+                            let _ = on_event.send(ChatStreamEvent::Usage {
+                                input_tokens,
+                                output_tokens,
+                            });
                         }
                     }
                 }
@@ -542,6 +588,49 @@ fn get_access_token(app: &AppHandle) -> Result<String, String> {
         .ok_or_else(|| "Not authenticated. Please authorize first.".to_string())
 }
 
+async fn refresh_access_token(app: &AppHandle) -> Result<String, String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let refresh_token = store
+        .get(STORE_KEY_REFRESH)
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .ok_or_else(|| "No refresh token available.".to_string())?;
+
+    let payload = json!({
+        "grant_type": "refresh_token",
+        "client_id": CLIENT_ID,
+        "refresh_token": refresh_token,
+    });
+
+    let client = Client::new();
+    let resp = client
+        .post(TOKEN_URL)
+        .header("content-type", "application/json")
+        .header("user-agent", "winter-app/0.1.0")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Token refresh failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Token refresh HTTP {}: {}", status, body));
+    }
+
+    let tokens: TokenResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse refresh response: {}", e))?;
+
+    store.set(STORE_KEY_ACCESS, json!(tokens.access_token));
+    store.set(STORE_KEY_REFRESH, json!(tokens.refresh_token));
+    let expires_at = now_millis() + tokens.expires_in * 1000;
+    store.set(STORE_KEY_EXPIRES, json!(expires_at));
+    store.save().map_err(|e| e.to_string())?;
+
+    Ok(tokens.access_token)
+}
+
 // ── Feedback Email ─────────────────────────────────────────────────
 
 const FEEDBACK_TO: &str = "gyugoat@gmail.com";
@@ -639,7 +728,7 @@ async fn chat_send(
     messages: Vec<ChatMessage>,
     on_event: Channel<ChatStreamEvent>,
 ) -> Result<(), String> {
-    let access_token = get_access_token(&app)?;
+    let mut access_token = get_access_token(&app)?;
     let client = Client::new();
     let abort_flag = app.state::<Arc<AtomicBool>>();
     abort_flag.store(false, Ordering::SeqCst);
@@ -647,6 +736,7 @@ async fn chat_send(
     let _ = on_event.send(ChatStreamEvent::StreamStart);
 
     let system_prompt = build_system_prompt(&app);
+    let model = get_model(&app);
     let mut conversation: Vec<ChatMessage> = messages;
 
     let ollama_settings = ollama::get_settings(&app);
@@ -673,7 +763,14 @@ async fn chat_send(
         if abort_flag.load(Ordering::SeqCst) {
             break;
         }
-        let result = stream_response(&client, &access_token, &conversation, &on_event, &system_prompt, &abort_flag).await?;
+        let result = match stream_response(&client, &access_token, &conversation, &on_event, &system_prompt, &abort_flag, &model).await {
+            Ok(r) => r,
+            Err(e) if e == "AUTH_EXPIRED" => {
+                access_token = refresh_access_token(&app).await?;
+                stream_response(&client, &access_token, &conversation, &on_event, &system_prompt, &abort_flag, &model).await?
+            }
+            Err(e) => return Err(e),
+        };
 
         if result.stop_reason == "aborted" {
             break;

@@ -35,6 +35,7 @@ const SHORTCUT_KEYS = [
   { labelKey: 'shortcutAlwaysOnTop' as const, keys: 'Ctrl + P' },
   { labelKey: 'shortcutPrevMessage' as const, keys: 'Ctrl + ↑' },
   { labelKey: 'shortcutStopResponse' as const, keys: 'Esc' },
+  { labelKey: 'shortcutSearch' as const, keys: 'Ctrl + F' },
 ];
 
 const MBTI_PAIRS: [string, string][] = [['I', 'E'], ['N', 'S'], ['T', 'F'], ['J', 'P']];
@@ -62,10 +63,17 @@ function ShortcutsContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLEleme
   );
 }
 
+const CLAUDE_MODELS = [
+  { id: 'claude-opus-4-20250514', label: 'modelOpus' as const },
+  { id: 'claude-sonnet-4-20250514', label: 'modelSonnet' as const },
+  { id: 'claude-haiku-4-20250514', label: 'modelHaiku' as const },
+];
+
 function PersonalizeContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
   const { t } = useI18n();
   const [mbtiLetters, setMbtiLetters] = useState<string[]>(['I', 'N', 'T', 'J']);
   const [animatingIdx, setAnimatingIdx] = useState<number | null>(null);
+  const [selectedModel, setSelectedModel] = useState('claude-opus-4-20250514');
 
   useEffect(() => {
     (async () => {
@@ -74,6 +82,10 @@ function PersonalizeContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLEle
         const saved = await store.get<string>('mbti_type');
         if (saved && typeof saved === 'string' && saved.length === 4) {
           setMbtiLetters(saved.split(''));
+        }
+        const savedModel = await store.get<string>('claude_model');
+        if (savedModel && typeof savedModel === 'string') {
+          setSelectedModel(savedModel);
         }
       } catch {}
     })();
@@ -98,7 +110,7 @@ function PersonalizeContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLEle
 
     try {
       const mbtiType = newLetters.join('');
-      const personality = MBTI_PERSONALITIES[mbtiType];
+      const personality = MBTI_PERSONALITIES[mbtiType as keyof typeof MBTI_PERSONALITIES];
       const store = await load('settings.json');
       await store.set('mbti_type', mbtiType);
       if (personality) {
@@ -108,8 +120,33 @@ function PersonalizeContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLEle
     } catch {}
   };
 
+  const handleModelChange = async (e: React.MouseEvent<HTMLElement>, modelId: string) => {
+    onFlash(e);
+    setSelectedModel(modelId);
+    try {
+      const store = await load('settings.json');
+      await store.set('claude_model', modelId);
+      await store.save();
+    } catch {}
+  };
+
   return (
     <div className="settings-personalize-cards">
+      <div className="settings-card">
+        <span className="settings-card-title">{t('modelTitle')}</span>
+        <span className="settings-card-subtitle">{t('modelSubtitle')}</span>
+        <div className="settings-model-list">
+          {CLAUDE_MODELS.map((m) => (
+            <button
+              key={m.id}
+              className={`settings-model-btn${selectedModel === m.id ? ' active' : ''}`}
+              onClick={(e) => handleModelChange(e, m.id)}
+            >
+              {t(m.label)}
+            </button>
+          ))}
+        </div>
+      </div>
       <button className="settings-card" onClick={onFlash}>
         <span className="settings-card-title">{t('personalizeApps')}</span>
         <span className="settings-card-subtitle">{t('personalizeAppsSubtitle')}</span>

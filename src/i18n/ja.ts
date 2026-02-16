@@ -118,4 +118,11 @@ export const ja: Record<TranslationKey, string> = {
   ollamaInstalling: 'インストール中...',
   ollamaInstallDone: 'インストール完了！',
   ollamaInstallFailed: 'インストール失敗',
+  searchPlaceholder: 'メッセージを検索...',
+  shortcutSearch: 'メッセージ検索',
+  modelTitle: 'モデル',
+  modelSubtitle: '会話に使用するClaudeモデルを選択',
+  modelOpus: 'Opus',
+  modelSonnet: 'Sonnet',
+  modelHaiku: 'Haiku',
 };

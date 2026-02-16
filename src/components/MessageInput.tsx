@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { useI18n } from '../i18n';
+import type { ImageAttachment } from '../types';
 import '../styles/input.css';
 
 interface MessageInputProps {
-  onSend: (text: string) => void;
+  onSend: (text: string, images?: ImageAttachment[]) => void;
   disabled?: boolean;
   isStreaming?: boolean;
   onStop?: () => void;
@@ -14,10 +15,24 @@ interface MessageInputProps {
   onFocusReady?: (fn: () => void) => void;
 }
 
+function fileToBase64(file: File): Promise<ImageAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      resolve({ mediaType: file.type || 'image/png', data: base64 });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryUp, onHistoryDown, fileInputRef: externalFileRef, onFocusReady }: MessageInputProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
   const [text, setText] = useState('');
+  const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const internalFileRef = useRef<HTMLInputElement>(null);
   const fileInputRef = externalFileRef ?? internalFileRef;
@@ -30,13 +45,14 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
+    if ((!trimmed && attachedImages.length === 0) || disabled) return;
+    onSend(trimmed, attachedImages.length > 0 ? attachedImages : undefined);
     setText('');
+    setAttachedImages([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [text, onSend]);
+  }, [text, attachedImages, onSend, disabled]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -65,16 +81,69 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   };
 
+  const processFiles = useCallback(async (files: FileList | File[]) => {
+    const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+    const newImages = await Promise.all(imageFiles.map(fileToBase64));
+    setAttachedImages((prev) => [...prev, ...newImages]);
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageItems = Array.from(items).filter((item) => item.type.startsWith('image/'));
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    const files = imageItems.map((item) => item.getAsFile()).filter(Boolean) as File[];
+    processFiles(files);
+  }, [processFiles]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const files = e.dataTransfer?.files;
+    if (files) processFiles(files);
+  }, [processFiles]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) processFiles(files);
+    e.target.value = '';
+  }, [processFiles]);
+
+  const removeImage = useCallback((index: number) => {
+    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   return (
-    <div className="input-bar">
+    <div className="input-bar" onDrop={handleDrop} onDragOver={handleDragOver}>
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*,.pdf"
         hidden
         multiple
+        onChange={handleFileChange}
       />
       <div className="input-bubble">
+        {attachedImages.length > 0 && (
+          <div className="input-image-previews">
+            {attachedImages.map((img, i) => (
+              <div key={i} className="input-image-thumb">
+                <img src={`data:${img.mediaType};base64,${img.data}`} alt="" />
+                <button className="input-image-remove" onClick={() => removeImage(i)}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           className="input-field"
@@ -82,6 +151,7 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           rows={1}
         />
         <div className="input-actions">

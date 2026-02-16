@@ -118,4 +118,11 @@ export const zh: Record<TranslationKey, string> = {
   ollamaInstalling: '安装中...',
   ollamaInstallDone: '安装完成！',
   ollamaInstallFailed: '安装失败',
+  searchPlaceholder: '搜索消息...',
+  shortcutSearch: '搜索消息',
+  modelTitle: '模型',
+  modelSubtitle: '选择对话使用的Claude模型',
+  modelOpus: 'Opus',
+  modelSonnet: 'Sonnet',
+  modelHaiku: 'Haiku',
 };

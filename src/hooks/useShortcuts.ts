@@ -12,6 +12,7 @@ interface ShortcutActions {
   onAttachFile: () => void;
   onStopStreaming: () => void;
   onFocusInput: () => void;
+  onSearch: () => void;
   isStreaming: boolean;
   sessions: { id: string }[];
   activeSessionId: string;
@@ -103,6 +104,11 @@ export function useShortcuts(actions: ShortcutActions) {
         case 'k':
           e.preventDefault();
           actions.onAttachFile();
+          break;
+
+        case 'f':
+          e.preventDefault();
+          actions.onSearch();
           break;
 
         case 'p': {

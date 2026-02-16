@@ -118,4 +118,11 @@ export const ko: Record<TranslationKey, string> = {
   ollamaInstalling: '설치 중...',
   ollamaInstallDone: '설치 완료!',
   ollamaInstallFailed: '설치 실패',
+  searchPlaceholder: '메시지 검색...',
+  shortcutSearch: '메시지 검색',
+  modelTitle: '모델',
+  modelSubtitle: '대화에 사용할 Claude 모델 선택',
+  modelOpus: 'Opus',
+  modelSonnet: 'Sonnet',
+  modelHaiku: 'Haiku',
 };

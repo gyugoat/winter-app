@@ -60,6 +60,7 @@ marked.use({ renderer });
 
 interface MessageListProps {
   messages: Message[];
+  searchQuery?: string;
 }
 
 function formatTime(ts: number): string {
@@ -73,7 +74,16 @@ function renderMarkdown(content: string): string {
   return DOMPurify.sanitize(raw);
 }
 
-export function MessageList({ messages }: MessageListProps) {
+function highlightText(text: string, query: string): string {
+  if (!query) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(
+    new RegExp(`(${escaped})`, 'gi'),
+    '<mark class="search-highlight">$1</mark>'
+  );
+}
+
+export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
   const { t } = useI18n();
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -108,13 +118,24 @@ export function MessageList({ messages }: MessageListProps) {
     });
   }, [t]);
 
+  const filteredMessages = useMemo(
+    () => searchQuery
+      ? messages.filter((msg) => msg.content.toLowerCase().includes(searchQuery.toLowerCase()))
+      : messages,
+    [messages, searchQuery]
+  );
+
   const renderedMessages = useMemo(
     () =>
-      messages.map((msg) => ({
+      filteredMessages.map((msg) => ({
         ...msg,
-        html: msg.role === 'assistant' ? renderMarkdown(msg.content) : null,
+        html: msg.role === 'assistant'
+          ? (searchQuery
+              ? highlightText(renderMarkdown(msg.content), searchQuery)
+              : renderMarkdown(msg.content))
+          : null,
       })),
-    [messages]
+    [filteredMessages, searchQuery]
   );
 
   if (messages.length === 0) {
@@ -142,6 +163,11 @@ export function MessageList({ messages }: MessageListProps) {
               <div
                 className="message-bubble message-bubble-markdown"
                 dangerouslySetInnerHTML={{ __html: msg.html }}
+              />
+            ) : searchQuery ? (
+              <div
+                className="message-bubble"
+                dangerouslySetInnerHTML={{ __html: highlightText(msg.content, searchQuery) }}
               />
             ) : (
               <div className="message-bubble">{msg.content}</div>

@@ -281,3 +281,10 @@
 .hljs-literal,
 .hljs-operator { color: #56b6c2; }
 .hljs-punctuation { color: var(--text-secondary); }
+
+.search-highlight {
+  background: rgba(250, 204, 21, 0.3);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
