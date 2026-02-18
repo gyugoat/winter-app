@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Titlebar } from './Titlebar';
 import { Sidebar } from './Sidebar';
 import { MessageList } from './MessageList';
@@ -6,6 +7,8 @@ import { MessageInput } from './MessageInput';
 import { SnowBackground } from './SnowBackground';
 import { SettingsPage } from './Settings';
 import { Diamond } from './Diamond';
+import { FileChanges } from './FileChanges';
+import { FileViewer } from './FileViewer';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { useChat } from '../hooks/useChat';
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -13,7 +16,7 @@ import { useI18n } from '../i18n';
 import type { TranslationKey } from '../i18n';
 import '../styles/chat.css';
 
-export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive' | 'ollama';
+export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive' | 'ollama' | 'folder';
 
 interface ChatProps {
   onReauth?: () => void;
@@ -28,6 +31,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [changesOpen, setChangesOpen] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
   const [diamondGlow, setDiamondGlow] = useState(false);
   const [toast, setToast] = useState<{ text: string; dropping: boolean } | null>(null);
@@ -50,7 +54,15 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     abortOpencode,
   } = useChat();
 
+  const [workingDirectory, setWorkingDirectory] = useState('/home/gyugo');
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    invoke<string>('get_working_directory').then(setWorkingDirectory).catch(() => {});
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,6 +82,30 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
+
+  const handleChangeDirectory = useCallback((dir: string) => {
+    invoke('set_working_directory', { directory: dir })
+      .then(() => setWorkingDirectory(dir))
+      .catch((err) => console.error('Failed to set directory:', err));
+  }, []);
+
+  const handleOpenFile = useCallback((filePath: string | null) => {
+    if (!filePath) { setActiveTab(null); return; }
+    setOpenTabs((prev) => prev.includes(filePath) ? prev : [...prev, filePath]);
+    setActiveTab(filePath);
+  }, []);
+
+  const handleCloseTab = useCallback((filePath: string) => {
+    setOpenTabs((prev) => {
+      const next = prev.filter((p) => p !== filePath);
+      if (activeTab === filePath) {
+        const idx = prev.indexOf(filePath);
+        const neighbor = next[Math.min(idx, next.length - 1)] ?? null;
+        setActiveTab(neighbor);
+      }
+      return next;
+    });
+  }, [activeTab]);
 
   const toggleSearch = useCallback(() => {
     setSearchOpen((prev) => {
@@ -152,7 +188,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   return (
     <div className="chat-layout">
       <Titlebar />
-      <div className={`chat-body${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}`}>
+      <div className={`chat-body${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}${changesOpen ? ' changes-open' : ''}`}>
         <Sidebar
           open={sidebarOpen}
           onToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -184,11 +220,19 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
               {toast.text}
             </span>
           )}
-      {/* {(usage.input > 0 || usage.output > 0) && (
-      <span className="chat-usage">
-      {usage.input.toLocaleString()} / {usage.output.toLocaleString()}
-      </span>
-      )} */}
+        </button>
+        <button
+          className={`fc-toggle-btn${changesOpen ? ' active' : ''}`}
+          onClick={(e) => { onFlash(e); setChangesOpen(!changesOpen); }}
+          aria-label="Toggle file changes"
+          style={{ position: 'absolute', top: 14, right: 16, zIndex: 2 }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="12" y1="18" x2="12" y2="12" />
+            <line x1="9" y1="15" x2="15" y2="15" />
+          </svg>
         </button>
         {searchOpen && (
           <div className="chat-search-bar">
@@ -213,12 +257,49 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
             </button>
           </div>
         )}
+        {openTabs.length > 0 && (
+          <div className="tab-bar">
+            <button
+              className={`tab-item${activeTab === null ? ' active' : ''}`}
+              onClick={() => setActiveTab(null)}
+            >
+              <span className="tab-label">Chat</span>
+            </button>
+            {openTabs.map((fp) => (
+              <button
+                key={fp}
+                className={`tab-item${activeTab === fp ? ' active' : ''}`}
+                onClick={() => setActiveTab(fp)}
+              >
+                <span className="tab-label">{fp.split('/').pop()}</span>
+                <span
+                  className="tab-close"
+                  onClick={(e) => { e.stopPropagation(); handleCloseTab(fp); }}
+                  role="button"
+                  aria-label={`Close ${fp.split('/').pop()}`}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         {settingsPage !== null ? (
           <SettingsPage
             page={settingsPage}
             onClose={() => setSettingsPage(null)}
             sessions={archivedSessions}
             onSwitchSession={(id) => { handleSwitchSession(id); setSettingsPage(null); }}
+            workingDirectory={workingDirectory}
+            onChangeDirectory={(dir) => { handleChangeDirectory(dir); setSettingsPage(null); }}
+          />
+        ) : activeTab ? (
+          <FileViewer
+            filePath={activeTab}
+            homePath={workingDirectory}
           />
         ) : (
           <>
@@ -235,6 +316,13 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
             />
           </>
         )}
+        <FileChanges
+          ocSessionId={activeSession.ocSessionId}
+          open={changesOpen}
+          onToggle={() => setChangesOpen(false)}
+          externalDirectory={workingDirectory}
+          onViewFile={handleOpenFile}
+        />
       </div>
     </div>
   );

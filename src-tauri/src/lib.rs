@@ -679,6 +679,37 @@ async fn set_session_key(app: AppHandle, key: String) -> Result<(), String> {
     Ok(())
 }
 
+// ── Working Directory Commands ──────────────────────────────────────
+
+#[tauri::command]
+async fn get_working_directory(app: AppHandle) -> Result<String, String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let dir = store
+        .get("opencode_directory")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string());
+    Ok(dir)
+}
+
+#[tauri::command]
+async fn set_working_directory(app: AppHandle, directory: String) -> Result<(), String> {
+    let path = std::path::Path::new(&directory);
+    if !path.is_absolute() {
+        return Err("Path must be absolute".to_string());
+    }
+    if !path.exists() {
+        return Err(format!("Directory does not exist: {}", directory));
+    }
+    if !path.is_dir() {
+        return Err(format!("Not a directory: {}", directory));
+    }
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    store.set("opencode_directory", json!(directory));
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── OpenCode Bridge Commands ───────────────────────────────────────
 
 const DEFAULT_OPENCODE_URL: &str = "http://127.0.0.1:6096";
@@ -774,6 +805,64 @@ async fn opencode_abort(app: AppHandle, oc_session_id: String) -> Result<(), Str
     client.abort(&oc_session_id).await
 }
 
+#[tauri::command]
+async fn create_directory(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.is_absolute() {
+        return Err("Path must be absolute".to_string());
+    }
+    if p.exists() {
+        return Err(format!("Already exists: {}", path));
+    }
+    tokio::fs::create_dir_all(&path)
+        .await
+        .map_err(|e| format!("Failed to create directory: {}", e))
+}
+
+#[tauri::command]
+async fn search_directories(root: String, query: String, max_results: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
+    use std::collections::VecDeque;
+    let limit = max_results.unwrap_or(20);
+    let q = query.to_lowercase();
+    let root_path = std::path::PathBuf::from(&root);
+    if !root_path.is_dir() {
+        return Err("Root is not a directory".to_string());
+    }
+    let skip: std::collections::HashSet<&str> = [
+        "node_modules", ".git", "target", "__pycache__", ".cache",
+        ".local", ".npm", ".bun", "backups", ".rustup", ".vscode-server",
+        "hourly", "daily",
+    ].into_iter().collect();
+    let mut results = Vec::new();
+    let mut queue = VecDeque::new();
+    queue.push_back((root_path, 0u8));
+    while let Some((dir, depth)) = queue.pop_front() {
+        if results.len() >= limit { break; }
+        let mut entries = match tokio::fs::read_dir(&dir).await {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let ft = match entry.file_type().await {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+            if !ft.is_dir() { continue; }
+            if skip.contains(name.as_str()) { continue; }
+            let abs = entry.path().to_string_lossy().to_string();
+            if name.to_lowercase().contains(&q) {
+                results.push(serde_json::json!({ "name": name, "absolute": abs }));
+                if results.len() >= limit { break; }
+            }
+            if depth < 6 {
+                queue.push_back((entry.path(), depth + 1));
+            }
+        }
+    }
+    Ok(results)
+}
+
 const DEFAULT_OPENCODE_DIR: &str = "/home/gyugo/.openclaw-winter/workspace";
 
 fn get_opencode_client(app: &AppHandle) -> Result<opencode::OpenCodeClient, String> {
@@ -815,8 +904,9 @@ async fn chat_send(app: AppHandle, messages: Vec<ChatMessage>, on_event: Channel
 
     if ollama_settings.enabled && conversation.len() > 10 {
         let _ = on_event.send(ChatStreamEvent::OllamaStatus { status: "compressing".to_string() });
-        if let Ok(compressed) = ollama::compress_history(&ollama_settings.base_url, &ollama_settings.model, &conversation).await {
-            conversation = compressed;
+        match ollama::compress_history(&ollama_settings.base_url, &ollama_settings.model, &conversation).await {
+            Ok(compressed) => { conversation = compressed; }
+            Err(_) => { let _ = on_event.send(ChatStreamEvent::OllamaStatus { status: "compression_failed".to_string() }); }
         }
         let _ = on_event.send(ChatStreamEvent::OllamaStatus { status: "done".to_string() });
     }
@@ -891,6 +981,7 @@ pub fn run() {
             ollama_check, ollama_models, ollama_toggle, ollama_set_config,
             fetch_claude_usage, set_session_key,
             opencode_check, opencode_create_session, opencode_send, opencode_abort,
+            get_working_directory, set_working_directory, create_directory, search_directories,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

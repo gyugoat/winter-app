@@ -442,12 +442,24 @@ export function useChat() {
   };
 
   const abortOpencode = useCallback(() => {
+    cancelledRef.current = true;
+    setIsStreaming(false);
+
+    if (activeSessionId) {
+      updateSession(activeSessionId, (s) => ({
+        ...s,
+        messages: s.messages.map((m) =>
+          m.isStreaming ? { ...m, isStreaming: false, statusText: undefined } : m
+        ),
+      }));
+    }
+
     const session = activeSession;
     if (session?.ocSessionId) {
       invoke('opencode_abort', { ocSessionId: session.ocSessionId }).catch(() => {});
     }
     invoke('abort_stream').catch(() => {});
-  }, [activeSession]);
+  }, [activeSession, activeSessionId, updateSession]);
 
   return {
     sessions: activeSessions,

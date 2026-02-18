@@ -151,4 +151,11 @@ export const ja: Record<TranslationKey, string> = {
   readmeShortcutsBody: 'Ctrl+Nで新セッション、Ctrl+Fで検索、Ctrl+[/]でセッション切替、Ctrl+Kでファイル添付、Escで応答停止。設定 → ショートカットで全リスト確認。',
   readmeModelTitle: 'モデル選択',
   readmeModelBody: '設定 → パーソナライズでOpus（最も賢い）、Sonnet（バランス）、Haiku（最速）を切替可能。デフォルトはOpus。',
+  folderTitle: 'フォルダ選択',
+  folderSelect: 'このフォルダを選択',
+  folderSearch: '検索',
+  folderEmpty: 'サブフォルダなし',
+  folderLoading: '読み込み中...',
+  folderCreate: 'フォルダ作成',
+  folderCreatePlaceholder: '新しいフォルダ名...',
 };

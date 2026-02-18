@@ -147,6 +147,13 @@ export const en = {
   readmeShortcutsBody: 'Ctrl+N for new session, Ctrl+F to search, Ctrl+[ / ] to switch sessions, Ctrl+K to attach files, Esc to stop a response. Check Settings \u2192 Shortcuts for the full list.',
   readmeModelTitle: 'Pick Your Model',
   readmeModelBody: 'Go to Settings \u2192 Personalize to switch between Opus (smartest), Sonnet (balanced), and Haiku (fastest). Opus is default.',
+  folderTitle: 'Select Folder',
+  folderSelect: 'Select this folder',
+  folderSearch: 'Search',
+  folderEmpty: 'No subdirectories',
+  folderLoading: 'Loading...',
+  folderCreate: 'Create folder',
+  folderCreatePlaceholder: 'New folder name...',
 } as const;
 
 export type TranslationKey = keyof typeof en;

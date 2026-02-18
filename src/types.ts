@@ -32,3 +32,40 @@ export type ChatStreamEvent =
   | { event: 'ollama_status'; data: { status: string } }
   | { event: 'status'; data: { text: string } }
   | { event: 'usage'; data: { input_tokens: number; output_tokens: number } };
+
+// ── File Changes ──
+
+export interface FileChange {
+  path: string;
+  absolute?: string;
+  status: 'added' | 'modified' | 'deleted';
+  additions: number;
+  deletions: number;
+}
+
+export interface FileDiff {
+  path: string;
+  before: string | null;
+  after: string | null;
+  hunks: DiffHunk[];
+}
+
+export interface DiffHunk {
+  header: string;
+  lines: DiffLine[];
+}
+
+export interface DiffLine {
+  type: 'addition' | 'deletion' | 'context';
+  content: string;
+  oldLineNumber?: number;
+  newLineNumber?: number;
+}
+
+export interface FileTreeNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: FileTreeNode[];
+  change?: FileChange;
+}

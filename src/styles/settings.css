@@ -797,6 +797,319 @@
   text-decoration: underline;
 }
 
+/* ── Folder Browser ── */
+
+.settings-folder-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-folder-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-folder-search-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.settings-folder-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: var(--shadow-elevated);
+  animation: settingsPopupIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.settings-folder-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: background 0.12s, color 0.12s;
+  text-align: left;
+}
+
+.settings-folder-dropdown-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-folder-dropdown-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.settings-folder-dropdown-item:hover .settings-folder-dropdown-icon {
+  color: var(--text-secondary);
+}
+
+.settings-folder-dropdown-name {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.settings-folder-dropdown-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+  direction: rtl;
+  text-align: left;
+}
+
+.settings-folder-dropdown-empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.settings-folder-input {
+  flex: 1;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  letter-spacing: 0.02em;
+  transition: border-color 0.15s;
+}
+
+.settings-folder-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-folder-input::placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+.settings-folder-go-btn {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.settings-folder-go-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+.settings-folder-browse-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.settings-folder-nav-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.settings-folder-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-folder-nav-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-folder-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.settings-folder-browse-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  letter-spacing: 0.02em;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-folder-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-folder-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-folder-dirlist {
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 10px;
+}
+
+.settings-folder-card {
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-folder-card .settings-card-row {
+  gap: 10px;
+}
+
+.settings-folder-card .settings-card-row svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.settings-folder-empty {
+  padding: 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.settings-folder-select-btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-text, #fff);
+  background: var(--accent);
+  border-radius: 10px;
+  text-align: center;
+  transition: opacity 0.15s;
+  align-self: flex-end;
+}
+
+.settings-folder-select-btn:hover {
+  opacity: 0.9;
+}
+
+/* ── New Folder Popup ── */
+
+.settings-folder-create-popup {
+  position: relative;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: var(--shadow-elevated);
+  animation: settingsPopupIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-folder-create-popup-bubble {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: var(--bubble-winter);
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  transition: border-color 0.15s, background 0.2s;
+}
+
+.settings-folder-create-popup-bubble:hover {
+  background: var(--accent-subtle);
+}
+
+.settings-folder-create-popup-bubble:focus-within {
+  border-color: var(--input-focus-border);
+  background: var(--accent-subtle-hover);
+}
+
+.settings-folder-create-popup-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  padding: 4px;
+}
+
+.settings-folder-create-popup-input::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-folder-create-popup-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-folder-create-popup-confirm:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 /* ── Responsive ── */
 
 @media (max-width: 768px) {

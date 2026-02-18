@@ -154,4 +154,11 @@ export const ko: Record<TranslationKey, string> = {
   readmeShortcutsBody: 'Ctrl+N 새 세션, Ctrl+F 검색, Ctrl+[ / ] 세션 전환, Ctrl+K 파일 첨부, Esc 응답 중지. 설정 → 단축키에서 전체 목록을 확인하세요.',
   readmeModelTitle: '모델 선택',
   readmeModelBody: '설정 → 개인화에서 Opus(가장 똑똑), Sonnet(균형), Haiku(가장 빠름) 중 선택 가능해요. 기본은 Opus.',
+  folderTitle: '폴더 선택',
+  folderSelect: '이 폴더 선택',
+  folderSearch: '검색',
+  folderEmpty: '하위 폴더 없음',
+  folderLoading: '로딩 중...',
+  folderCreate: '폴더 만들기',
+  folderCreatePlaceholder: '새 폴더 이름...',
 };

@@ -123,12 +123,34 @@
   background: var(--bg-hover);
 }
 
-/* Hide sessions, labels, footer when collapsed */
+/* Hide sessions, labels, footer, select-folder when collapsed */
 .sidebar:not(.open) .sidebar-label,
 .sidebar:not(.open) .sidebar-sessions,
-.sidebar:not(.open) .sidebar-footer {
+.sidebar:not(.open) .sidebar-footer,
+.sidebar:not(.open) .sidebar-select-folder-btn {
   display: none;
 }
+
+.sidebar-select-folder-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin: 0 10px 4px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sidebar-select-folder-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+
 
 .sidebar-label {
   padding: 8px 16px 4px;

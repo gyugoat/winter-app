@@ -140,6 +140,8 @@ export function Sidebar({
   const [menuId, setMenuId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+
+
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [subPopup, setSubPopup] = useState<SubPopup>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
@@ -273,6 +275,16 @@ export function Sidebar({
             </svg>
           </button>
         </div>
+        <button
+          className="sidebar-select-folder-btn"
+          onClick={(e) => { onFlash(e); onSelectSettingsPage('folder'); }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          {t('folderTitle')}
+        </button>
+
         <button
           className="sidebar-new-btn"
           onClick={(e) => { onFlash(e); onNewSession(); }}

@@ -216,12 +216,23 @@ Output format: what was decided, what was done, what remains. Nothing else.\n\n{
     Ok(data.response.trim().to_string())
 }
 
+const PRIOR_CONTEXT_PREFIX: &str = "[Prior context —";
+
 pub async fn compress_history(base_url: &str, model: &str, messages: &[ChatMessage]) -> Result<Vec<ChatMessage>, String> {
     if messages.len() <= HISTORY_COMPRESS_THRESHOLD { return Ok(messages.to_vec()); }
 
-    let keep = 4;
-    let to_compress = &messages[..messages.len() - keep];
-    let to_keep = &messages[messages.len() - keep..];
+    // Dynamic keep: at least 2 user+assistant turn pairs, min 4, max 8
+    let keep = compute_keep(messages);
+    if messages.len() <= keep { return Ok(messages.to_vec()); }
+
+    // Find existing prior-context boundary to avoid re-compressing old summaries
+    let compress_start = find_compress_start(messages);
+    let compress_end = messages.len() - keep;
+    if compress_start >= compress_end { return Ok(messages.to_vec()); }
+
+    let existing_summary = extract_existing_summary(messages, compress_start);
+    let to_compress = &messages[compress_start..compress_end];
+    let to_keep = &messages[compress_end..];
 
     let mut transcript = String::new();
     for msg in to_compress {
@@ -229,12 +240,27 @@ pub async fn compress_history(base_url: &str, model: &str, messages: &[ChatMessa
     }
 
     if transcript.len() < MIN_SUMMARIZE_LEN { return Ok(messages.to_vec()); }
-    let summary = summarize(base_url, model, &transcript).await?;
+
+    // Prepend existing summary so Ollama merges old + new context
+    let input = if let Some(ref prev) = existing_summary {
+        format!("[Previous summary]\n{}\n\n[New messages]\n{}", prev, transcript)
+    } else {
+        transcript
+    };
+    let summary = summarize(base_url, model, &input).await?;
+
+    let total_compressed = if existing_summary.is_some() {
+        // Count includes previously compressed messages
+        let prev_count = extract_prev_count(messages, compress_start);
+        prev_count + to_compress.len()
+    } else {
+        to_compress.len()
+    };
 
     let mut result = Vec::with_capacity(2 + keep);
     result.push(ChatMessage {
         role: "user".to_string(),
-        content: MessageContent::Text(format!("[Prior context — {} messages compressed]\n{}", to_compress.len(), summary)),
+        content: MessageContent::Text(format!("{} {} messages compressed]\n{}", PRIOR_CONTEXT_PREFIX, total_compressed, summary)),
     });
     result.push(ChatMessage {
         role: "assistant".to_string(),
@@ -244,12 +270,66 @@ pub async fn compress_history(base_url: &str, model: &str, messages: &[ChatMessa
     Ok(result)
 }
 
+fn compute_keep(messages: &[ChatMessage]) -> usize {
+    let mut turns = 0;
+    let mut keep = 0;
+    for msg in messages.iter().rev() {
+        keep += 1;
+        if msg.role == "user" { turns += 1; }
+        if turns >= 2 && keep >= 4 { break; }
+        if keep >= 8 { break; }
+    }
+    keep.max(4)
+}
+
+fn find_compress_start(messages: &[ChatMessage]) -> usize {
+    for (i, msg) in messages.iter().enumerate() {
+        if let MessageContent::Text(ref t) = msg.content {
+            if t.starts_with(PRIOR_CONTEXT_PREFIX) {
+                // Skip the summary message + the "Context received." reply
+                return (i + 2).min(messages.len());
+            }
+        }
+    }
+    0
+}
+
+fn extract_existing_summary(messages: &[ChatMessage], compress_start: usize) -> Option<String> {
+    if compress_start < 2 { return None; }
+    if let MessageContent::Text(ref t) = messages[compress_start - 2].content {
+        if t.starts_with(PRIOR_CONTEXT_PREFIX) {
+            // Strip the header line, keep just the summary body
+            return t.lines().skip(1).collect::<Vec<_>>().join("\n").into();
+        }
+    }
+    None
+}
+
+fn extract_prev_count(messages: &[ChatMessage], compress_start: usize) -> usize {
+    if compress_start < 2 { return 0; }
+    if let MessageContent::Text(ref t) = messages[compress_start - 2].content {
+        // Parse "[Prior context — 12 messages compressed]"
+        if let Some(rest) = t.strip_prefix(PRIOR_CONTEXT_PREFIX) {
+            if let Some(num_str) = rest.trim_start().split_whitespace().next() {
+                return num_str.parse().unwrap_or(0);
+            }
+        }
+    }
+    0
+}
+
 fn extract_text_content(content: &MessageContent) -> String {
     match content {
         MessageContent::Text(s) => s.clone(),
         MessageContent::Blocks(blocks) => blocks.iter().map(|b| match b {
             ContentBlock::Text { text } => text.clone(),
-            _ => "[Tool/Image]".to_string(),
+            ContentBlock::ToolResult { content, .. } => {
+                let preview: String = content.chars().take(200).collect();
+                if content.len() > 200 { format!("[Tool result] {}...", preview) }
+                else { format!("[Tool result] {}", preview) }
+            }
+            ContentBlock::ToolUse { name, .. } => format!("[Tool: {}]", name),
+            _ => "[Image]".to_string(),
         }).collect::<Vec<_>>().join("\n"),
     }
 }

@@ -23,6 +23,12 @@
   padding-left: 50px;
 }
 
+.chat-body.changes-open {
+  padding-right: 280px;
+  transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* ── "Winter ❄." brand mark ── */
 
 .chat-brand {
@@ -166,3 +172,78 @@
   color: var(--text-primary);
   background: var(--bg-hover);
 }
+
+/* ── Tab bar (Chrome-style file tabs) ── */
+
+.tab-bar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0 24px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  scrollbar-width: none;
+}
+
+.tab-bar::-webkit-scrollbar { display: none; }
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.tab-item:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.tab-item.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+.tab-label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.tab-item:hover .tab-close,
+.tab-item.active .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
+

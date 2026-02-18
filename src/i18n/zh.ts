@@ -151,4 +151,11 @@ export const zh: Record<TranslationKey, string> = {
   readmeShortcutsBody: 'Ctrl+N新会话、Ctrl+F搜索、Ctrl+[/]切换会话、Ctrl+K附加文件、Esc停止响应。在设置 → 快捷键查看完整列表。',
   readmeModelTitle: '选择模型',
   readmeModelBody: '在设置 → 个性化中可以切换Opus（最聪明）、Sonnet（平衡）和Haiku（最快）。默认为Opus。',
+  folderTitle: '选择文件夹',
+  folderSelect: '选择此文件夹',
+  folderSearch: '搜索',
+  folderEmpty: '没有子文件夹',
+  folderLoading: '加载中...',
+  folderCreate: '新建文件夹',
+  folderCreatePlaceholder: '新文件夹名称...',
 };
