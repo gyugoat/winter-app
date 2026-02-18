@@ -149,6 +149,23 @@ impl OpenCodeClient {
         Ok(())
     }
 
+    pub async fn get_known_message_ids(&self, session_id: &str) -> std::collections::HashSet<String> {
+        let url = self.url(&format!("/session/{}/message", session_id));
+        let mut ids = std::collections::HashSet::new();
+        if let Ok(resp) = self.client.get(&url).send().await {
+            if let Ok(messages) = resp.json::<Vec<Value>>().await {
+                for msg in &messages {
+                    if let Some(info) = msg.get("info") {
+                        if let Some(mid) = info.get("id").and_then(|v| v.as_str()) {
+                            ids.insert(mid.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        ids
+    }
+
     pub async fn abort(&self, session_id: &str) -> Result<(), String> {
         let url = self.url(&format!("/session/{}/abort", session_id));
         let resp = self
@@ -163,6 +180,76 @@ impl OpenCodeClient {
         }
 
         Ok(())
+    }
+
+    // ── Proxy Methods (for Tauri invoke, replacing frontend fetch) ────
+
+    pub async fn get_path_info(&self) -> Result<serde_json::Value, String> {
+        let url = self.url("/path");
+        let resp = self.client.get(&url).send().await.map_err(|e| format!("Path request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("Path request failed: HTTP {}", resp.status()));
+        }
+        resp.json::<serde_json::Value>().await.map_err(|e| format!("Path parse failed: {}", e))
+    }
+
+    pub async fn list_files(&self, path: &str) -> Result<serde_json::Value, String> {
+        let url = self.url(&format!("/file?path={}", urlencoding::encode(path)));
+        let resp = self.client.get(&url).send().await.map_err(|e| format!("List files failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("List files failed: HTTP {}", resp.status()));
+        }
+        resp.json::<serde_json::Value>().await.map_err(|e| format!("List files parse failed: {}", e))
+    }
+
+    pub async fn file_content(&self, path: &str, opencode_dir: &str) -> Result<serde_json::Value, String> {
+        let url = self.url(&format!("/file/content?path={}", urlencoding::encode(path)));
+        let resp = self.client.get(&url)
+            .header("x-opencode-directory", opencode_dir)
+            .send().await.map_err(|e| format!("File content failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("File content failed: HTTP {}", resp.status()));
+        }
+        resp.json::<serde_json::Value>().await.map_err(|e| format!("File content parse failed: {}", e))
+    }
+
+    pub async fn get_questions(&self) -> Result<serde_json::Value, String> {
+        let url = self.url("/question");
+        let resp = self.client.get(&url).send().await.map_err(|e| format!("Questions request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("Questions request failed: HTTP {}", resp.status()));
+        }
+        resp.json::<serde_json::Value>().await.map_err(|e| format!("Questions parse failed: {}", e))
+    }
+
+    pub async fn reply_question(&self, request_id: &str, answers: serde_json::Value) -> Result<(), String> {
+        let url = self.url(&format!("/question/{}/reply", request_id));
+        let resp = self.client.post(&url)
+            .header("content-type", "application/json")
+            .json(&serde_json::json!({ "answers": answers }))
+            .send().await.map_err(|e| format!("Reply failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("Reply failed: HTTP {}", resp.status()));
+        }
+        Ok(())
+    }
+
+    pub async fn reject_question(&self, request_id: &str) -> Result<(), String> {
+        let url = self.url(&format!("/question/{}/reject", request_id));
+        let resp = self.client.post(&url).send().await.map_err(|e| format!("Reject failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("Reject failed: HTTP {}", resp.status()));
+        }
+        Ok(())
+    }
+
+    pub async fn get_session_messages(&self, session_id: &str) -> Result<serde_json::Value, String> {
+        let url = self.url(&format!("/session/{}/message", session_id));
+        let resp = self.client.get(&url).send().await.map_err(|e| format!("Messages request failed: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("Messages request failed: HTTP {}", resp.status()));
+        }
+        resp.json::<serde_json::Value>().await.map_err(|e| format!("Messages parse failed: {}", e))
     }
 
     /// Helper: send an idle "continue" ping to keep the session alive.
@@ -200,6 +287,7 @@ impl OpenCodeClient {
         session_id: &str,
         on_event: &Channel<ChatStreamEvent>,
         abort_flag: &AtomicBool,
+        known_msg_ids: std::collections::HashSet<String>,
     ) -> Result<(), String> {
         const IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
         const MAX_IDLE_PINGS: u32 = 3;
@@ -207,7 +295,6 @@ impl OpenCodeClient {
 
         let url = self.url("/global/event");
 
-        // State preserved across reconnections
         let mut text_lengths: HashMap<String, usize> = HashMap::new();
         let mut tool_started: HashMap<String, bool> = HashMap::new();
         let mut user_msg_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -275,6 +362,7 @@ impl OpenCodeClient {
             }
 
             eprintln!("[winter-app] SSE connected for session {}", session_id);
+
             let mut stream = resp.bytes_stream();
             let mut buffer = String::new();
 
@@ -359,10 +447,10 @@ impl OpenCodeClient {
                             last_session_activity = std::time::Instant::now();
                             idle_ping_count = 0;
 
-                            if let Some(ref mid) = part.message_id {
-                                if user_msg_ids.contains(mid) {
-                                    continue;
-                                }
+                            match part.message_id {
+                                Some(ref mid) if known_msg_ids.contains(mid) || user_msg_ids.contains(mid) => continue,
+                                None => continue,
+                                _ => {}
                             }
 
                             match part.part_type.as_str() {
@@ -515,8 +603,11 @@ impl OpenCodeClient {
                                     }
 
                                     if role == "assistant" && finish == "stop" {
-                                        let _ = on_event.send(ChatStreamEvent::StreamEnd);
-                                        return Ok(());
+                                        let mid = info.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                                        if !known_msg_ids.contains(mid) {
+                                            let _ = on_event.send(ChatStreamEvent::StreamEnd);
+                                            return Ok(());
+                                        }
                                     }
                                 }
                             }

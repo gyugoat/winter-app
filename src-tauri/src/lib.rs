@@ -628,7 +628,7 @@ async fn fetch_claude_usage(_app: AppHandle) -> Result<ClaudeUsage, String> {
     let home = std::env::var("HOME")
         .map_err(|_| "Cannot find HOME directory".to_string())?;
     let auth_path = std::path::PathBuf::from(home)
-        .join(".openclaw-winter/data/opencode/auth.json");
+        .join(".winter/data/opencode/auth.json");
 
     let auth_content = std::fs::read_to_string(&auth_path)
         .map_err(|e| format!("Cannot read auth.json: {}", e))?;
@@ -647,7 +647,7 @@ async fn fetch_claude_usage(_app: AppHandle) -> Result<ClaudeUsage, String> {
     let body: Value = client
         .get("https://api.anthropic.com/api/oauth/usage")
         .header("authorization", format!("Bearer {}", access_token))
-        .header("user-agent", "openclaw")
+        .header("user-agent", "winter-app")
         .header("accept", "application/json")
         .header("anthropic-version", "2023-06-01")
         .header("anthropic-beta", "oauth-2025-04-20")
@@ -776,12 +776,14 @@ async fn opencode_send(
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty());
 
+    let known_msg_ids = client.get_known_message_ids(&oc_session_id).await;
+
     let sse_handle = tokio::spawn({
         let session_id = oc_session_id;
         let on_ev = on_event;
         let flag = abort_flag.inner().clone();
         async move {
-            client.subscribe_sse(&session_id, &on_ev, &flag).await
+            client.subscribe_sse(&session_id, &on_ev, &flag, known_msg_ids).await
         }
     });
 
@@ -863,24 +865,72 @@ async fn search_directories(root: String, query: String, max_results: Option<usi
     Ok(results)
 }
 
-const DEFAULT_OPENCODE_DIR: &str = "/home/gyugo/.openclaw-winter/workspace";
+const DEFAULT_OPENCODE_DIR: &str = "/home/gyugo/.winter/workspace";
 
-fn get_opencode_client(app: &AppHandle) -> Result<opencode::OpenCodeClient, String> {
-    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
-    let base_url = store
-        .get("opencode_url")
+fn get_opencode_url(app: &AppHandle) -> String {
+    app.store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get("opencode_url"))
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| DEFAULT_OPENCODE_URL.to_string());
-    let directory = store
-        .get("opencode_directory")
-        .and_then(|v| v.as_str().map(|s| s.to_string()))
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string());
-    Ok(opencode::OpenCodeClient::new(base_url, directory))
+        .unwrap_or_else(|| DEFAULT_OPENCODE_URL.to_string())
 }
 
-// ── Chat Streaming Command (Standalone) ───────────────────────────
+fn get_opencode_dir(app: &AppHandle) -> String {
+    app.store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get("opencode_directory"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string())
+}
+
+fn get_opencode_client(app: &AppHandle) -> Result<opencode::OpenCodeClient, String> {
+    Ok(opencode::OpenCodeClient::new(get_opencode_url(app), get_opencode_dir(app)))
+}
+
+#[tauri::command]
+async fn opencode_get_path(app: AppHandle) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    client.get_path_info().await
+}
+
+#[tauri::command]
+async fn opencode_list_files(app: AppHandle, path: String) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    client.list_files(&path).await
+}
+
+#[tauri::command]
+async fn opencode_file_content(app: AppHandle, path: String) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    let dir = get_opencode_dir(&app);
+    client.file_content(&path, &dir).await
+}
+
+#[tauri::command]
+async fn opencode_get_questions(app: AppHandle) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    client.get_questions().await
+}
+
+#[tauri::command]
+async fn opencode_reply_question(app: AppHandle, request_id: String, answers: Value) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    client.reply_question(&request_id, answers).await
+}
+
+#[tauri::command]
+async fn opencode_reject_question(app: AppHandle, request_id: String) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    client.reject_question(&request_id).await
+}
+
+#[tauri::command]
+async fn opencode_get_messages(app: AppHandle, session_id: String) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    client.get_session_messages(&session_id).await
+}
 
 #[tauri::command]
 fn abort_stream(app: AppHandle) {
@@ -981,6 +1031,9 @@ pub fn run() {
             ollama_check, ollama_models, ollama_toggle, ollama_set_config,
             fetch_claude_usage, set_session_key,
             opencode_check, opencode_create_session, opencode_send, opencode_abort,
+            opencode_get_path, opencode_list_files, opencode_file_content,
+            opencode_get_questions, opencode_reply_question, opencode_reject_question,
+            opencode_get_messages,
             get_working_directory, set_working_directory, create_directory, search_directories,
         ])
         .run(tauri::generate_context!())
