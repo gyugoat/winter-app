@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useTransition, type ChangeEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Titlebar } from './Titlebar';
 import { Sidebar } from './Sidebar';
@@ -184,8 +184,11 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     prevSettingsRef.current = settingsPage;
   }, [settingsPage, triggerDiamondGlow]);
 
+  const [, startTransition] = useTransition();
   const handleSwitchSession = (id: string) => {
-    switchSession(id);
+    startTransition(() => {
+      switchSession(id);
+    });
     setSettingsPage(null);
     setSearchOpen(false);
     setSearchQuery('');

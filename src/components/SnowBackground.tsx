@@ -224,7 +224,7 @@ export function SnowBackground({ idle = false }: SnowBackgroundProps) {
 
     let lastTime = 0;
     let lastDrawTime = 0;
-    const TARGET_FPS = 60;
+    const TARGET_FPS = 20;
     const FRAME_MS = 1000 / TARGET_FPS;
     const MIN_FRAME_INTERVAL = FRAME_MS * 0.9;
 

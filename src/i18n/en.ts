@@ -157,6 +157,7 @@ export const en = {
   questionSkip: 'Skip',
   questionConfirm: 'Confirm',
   questionCustomPlaceholder: 'Type your own answer...',
+  showMore: 'Show more',
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -161,4 +161,5 @@ export const ja: Record<TranslationKey, string> = {
   questionSkip: 'スキップ',
   questionConfirm: '確認',
   questionCustomPlaceholder: '自分の回答を入力...',
+  showMore: 'もっと見る',
 };

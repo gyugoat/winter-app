@@ -6,7 +6,7 @@
   overflow-x: hidden;
   padding: 20px 24px;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 16px;
   max-width: 720px;
   margin: 0 auto;
@@ -45,6 +45,24 @@
   letter-spacing: 0.02em;
 }
 
+.message-show-more {
+  align-self: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 6px 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 0.15s, color 0.15s;
+}
+
+.message-show-more:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 /* Message row */
 .message-row {
   display: flex;
@@ -52,6 +70,8 @@
   max-width: 80%;
   min-width: 0;
   animation: msgIn 0.3s ease-out;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 80px;
 }
 
 .message-row > div {
@@ -123,6 +143,7 @@
   word-break: break-word;    /* 긴 단어(URL 등)가 밖으로 튀어나가지 않게 줄바꿈 */
   overflow: hidden;          /* 코드블록 등이 밖으로 튀어나가지 않게 */
   min-width: 0;              /* flex child shrink 허용 */
+  contain: paint;
 }
 
 /* ─────────────────────────────────────────────

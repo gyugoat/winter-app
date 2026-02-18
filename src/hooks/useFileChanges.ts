@@ -104,7 +104,7 @@ function toRelativePath(absPath: string, homePath: string): string {
   return absPath;
 }
 
-export function useFileChanges(ocSessionId: string | undefined, initialDirectory?: string): UseFileChangesReturn {
+export function useFileChanges(ocSessionId: string | undefined, initialDirectory?: string, enabled = true): UseFileChangesReturn {
   const [changes, setChanges] = useState<FileChange[]>([]);
   const [fileTree, setFileTree] = useState<FileTreeNode[]>([]);
   const [allFilesTree, setAllFilesTree] = useState<FileTreeNode[]>([]);
@@ -282,14 +282,14 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
   }, []);
 
   useEffect(() => {
-    if (!directory) return;
+    if (!directory || !enabled) return;
 
     setLoading(true);
     fetchChanges().finally(() => setLoading(false));
 
     const interval = setInterval(fetchChanges, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [directory, fetchChanges]);
+  }, [directory, fetchChanges, enabled]);
 
   useEffect(() => {
     if (viewMode === 'all' && (initialDirectory || directory)) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState, useCallback, memo } from 'react';
 import { Marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js/lib/core';
@@ -93,13 +93,78 @@ function highlightText(text: string, query: string): string {
   );
 }
 
+const MessageRow = memo(function MessageRow({ msg, searchQuery }: { msg: Message; searchQuery: string }) {
+  const html = useMemo(() => {
+    if (msg.isStreaming) return null;
+    if (msg.role !== 'assistant' || !msg.content) return null;
+    const rendered = renderMarkdown(msg.content);
+    return searchQuery ? highlightText(rendered, searchQuery) : rendered;
+  }, [msg.role, msg.content, msg.isStreaming, searchQuery]);
+
+  return (
+    <div className={`message-row ${msg.role}`}>
+      {msg.role === 'assistant' && (
+        <div className="message-avatar">
+          <div className="message-diamond" />
+        </div>
+      )}
+      <div>
+        {msg.statusText && msg.isStreaming && !msg.content ? (
+          <div className="message-bubble message-status">
+            {msg.statusText === 'thinking' ? (
+              <span className="thinking-dots"><span /><span /><span /></span>
+            ) : (
+              <span className="status-label">{msg.statusText}</span>
+            )}
+          </div>
+        ) : html ? (
+          <div className="message-bubble message-bubble-markdown">
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+            {msg.statusText && msg.isStreaming && (
+              <div className="message-inline-status">{msg.statusText}</div>
+            )}
+          </div>
+        ) : searchQuery ? (
+          <div
+            className="message-bubble"
+            dangerouslySetInnerHTML={{ __html: highlightText(msg.content, searchQuery) }}
+          />
+        ) : (
+          <div className="message-bubble">{msg.content}</div>
+        )}
+        <div className={`message-time${msg.role === 'user' ? ' user' : ''}`}>
+          {formatTime(msg.timestamp)}
+        </div>
+      </div>
+    </div>
+  );
+}, (prev, next) =>
+  prev.msg.id === next.msg.id &&
+  prev.msg.content === next.msg.content &&
+  prev.msg.isStreaming === next.msg.isStreaming &&
+  prev.msg.statusText === next.msg.statusText &&
+  prev.searchQuery === next.searchQuery
+);
+
+const PAGE_SIZE = 10;
+const LOAD_MORE_SIZE = 10;
+
 export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
   const { t } = useI18n();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const sessionKeyRef = useRef<string | undefined>(undefined);
+  const [maxVisible, setMaxVisible] = useState(PAGE_SIZE);
+  const [renderCount, setRenderCount] = useState(PAGE_SIZE);
+
+  const currentSessionKey = messages[0]?.id;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    if (currentSessionKey !== sessionKeyRef.current) {
+      sessionKeyRef.current = currentSessionKey;
+      setMaxVisible(PAGE_SIZE);
+      setRenderCount(1);
+    }
+  }, [currentSessionKey]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -135,18 +200,38 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
     [messages, searchQuery]
   );
 
-  const renderedMessages = useMemo(
-    () =>
-      filteredMessages.map((msg) => ({
-        ...msg,
-        html: msg.role === 'assistant' && msg.content
-          ? (searchQuery
-              ? highlightText(renderMarkdown(msg.content), searchQuery)
-              : renderMarkdown(msg.content))
-          : null,
-      })),
-    [filteredMessages, searchQuery]
+  const pageLimit = Math.min(maxVisible, filteredMessages.length);
+
+  useEffect(() => {
+    if (renderCount >= pageLimit) return;
+    const id = requestAnimationFrame(() => {
+      setRenderCount(prev => prev + 1);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [renderCount, pageLimit]);
+
+  useEffect(() => {
+    if (currentSessionKey === sessionKeyRef.current && filteredMessages.length > maxVisible) {
+      setMaxVisible(filteredMessages.length);
+      setRenderCount(filteredMessages.length);
+    }
+  }, [filteredMessages.length, maxVisible, currentSessionKey]);
+
+  const displayCount = Math.min(renderCount, pageLimit);
+  const hasMore = filteredMessages.length > maxVisible;
+
+  const visibleMessages = useMemo(
+    () => {
+      if (displayCount === 0) return [];
+      const sliced = filteredMessages.slice(filteredMessages.length - displayCount);
+      return [...sliced].reverse();
+    },
+    [filteredMessages, displayCount]
   );
+
+  const handleShowMore = useCallback(() => {
+    setMaxVisible((prev) => prev + LOAD_MORE_SIZE);
+  }, []);
 
   if (messages.length === 0) {
     return (
@@ -161,44 +246,15 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
 
   return (
     <div className="message-list">
-      {renderedMessages.map((msg) => (
-        <div key={msg.id} className={`message-row ${msg.role}`}>
-          {msg.role === 'assistant' && (
-            <div className="message-avatar">
-              <div className="message-diamond" />
-            </div>
-          )}
-          <div>
-            {msg.statusText && msg.isStreaming && !msg.content ? (
-              <div className="message-bubble message-status">
-                {msg.statusText === 'thinking' ? (
-                  <span className="thinking-dots"><span /><span /><span /></span>
-                ) : (
-                  <span className="status-label">{msg.statusText}</span>
-                )}
-              </div>
-            ) : msg.html ? (
-              <div className="message-bubble message-bubble-markdown">
-                <div dangerouslySetInnerHTML={{ __html: msg.html }} />
-                {msg.statusText && msg.isStreaming && (
-                  <div className="message-inline-status">{msg.statusText}</div>
-                )}
-              </div>
-            ) : searchQuery ? (
-              <div
-                className="message-bubble"
-                dangerouslySetInnerHTML={{ __html: highlightText(msg.content, searchQuery) }}
-              />
-            ) : (
-              <div className="message-bubble">{msg.content}</div>
-            )}
-            <div className={`message-time${msg.role === 'user' ? ' user' : ''}`}>
-              {formatTime(msg.timestamp)}
-            </div>
-          </div>
-        </div>
-      ))}
       <div ref={bottomRef} />
+      {visibleMessages.map((msg) => (
+        <MessageRow key={msg.id} msg={msg} searchQuery={searchQuery} />
+      ))}
+      {hasMore && (
+        <button className="message-show-more" onClick={handleShowMore}>
+          {t('showMore')} ({filteredMessages.length - maxVisible})
+        </button>
+      )}
     </div>
   );
 }

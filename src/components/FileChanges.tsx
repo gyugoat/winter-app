@@ -119,7 +119,7 @@ export function FileChanges({ ocSessionId, open, onToggle, externalDirectory, on
     viewMode,
     setViewMode,
     loadChildren,
-  } = useFileChanges(ocSessionId, externalDirectory);
+  } = useFileChanges(ocSessionId, externalDirectory, open);
 
   const handleSelectFile = useCallback((path: string) => {
     const next = selectedFile === path ? null : path;

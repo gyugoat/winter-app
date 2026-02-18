@@ -161,4 +161,5 @@ export const zh: Record<TranslationKey, string> = {
   questionSkip: '跳过',
   questionConfirm: '确认',
   questionCustomPlaceholder: '输入自定义答案...',
+  showMore: '查看更多',
 };

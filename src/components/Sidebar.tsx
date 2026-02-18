@@ -142,6 +142,7 @@ export function Sidebar({
   const [renameValue, setRenameValue] = useState('');
 
 
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [subPopup, setSubPopup] = useState<SubPopup>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
@@ -176,6 +177,10 @@ export function Sidebar({
       // silent
     }
   }, [sessionKeyInput, fetchClaudeUsage]);
+
+  useEffect(() => {
+    setLoadingSessionId(null);
+  }, [activeSessionId]);
 
   useEffect(() => {
     if (!open) {
@@ -302,8 +307,12 @@ export function Sidebar({
           {sessions.map((session) => (
             <div
               key={session.id}
-              className={`sidebar-session${session.id === activeSessionId ? ' active' : ''}`}
-              onClick={() => { onSwitchSession(session.id); }}
+              className={`sidebar-session${session.id === activeSessionId ? ' active' : ''}${session.id === loadingSessionId ? ' loading' : ''}`}
+              onClick={() => {
+                if (session.id === activeSessionId) return;
+                setLoadingSessionId(session.id);
+                onSwitchSession(session.id);
+              }}
             >
               {renamingId === session.id ? (
                 <input

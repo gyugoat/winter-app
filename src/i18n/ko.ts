@@ -164,4 +164,5 @@ export const ko: Record<TranslationKey, string> = {
   questionSkip: '건너뛰기',
   questionConfirm: '확인',
   questionCustomPlaceholder: '직접 입력...',
+  showMore: '더 보기',
 };

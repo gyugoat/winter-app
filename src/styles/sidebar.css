@@ -190,6 +190,15 @@
   font-weight: 500;
 }
 
+.sidebar-session.loading {
+  animation: sessionDimPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes sessionDimPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 .sidebar-session-name {
   flex: 1;
   overflow: hidden;
