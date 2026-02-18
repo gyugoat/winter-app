@@ -158,4 +158,7 @@ export const ja: Record<TranslationKey, string> = {
   folderLoading: '読み込み中...',
   folderCreate: 'フォルダ作成',
   folderCreatePlaceholder: '新しいフォルダ名...',
+  questionSkip: 'スキップ',
+  questionConfirm: '確認',
+  questionCustomPlaceholder: '自分の回答を入力...',
 };

@@ -154,6 +154,9 @@ export const en = {
   folderLoading: 'Loading...',
   folderCreate: 'Create folder',
   folderCreatePlaceholder: 'New folder name...',
+  questionSkip: 'Skip',
+  questionConfirm: 'Confirm',
+  questionCustomPlaceholder: 'Type your own answer...',
 } as const;
 
 export type TranslationKey = keyof typeof en;

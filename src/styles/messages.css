@@ -3,6 +3,7 @@
   z-index: 1;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
@@ -49,7 +50,12 @@
   display: flex;
   gap: 10px;
   max-width: 80%;
+  min-width: 0;
   animation: msgIn 0.3s ease-out;
+}
+
+.message-row > div {
+  min-width: 0;
 }
 
 @keyframes msgIn {
@@ -115,6 +121,8 @@
   font-size: 15px;           /* 글자 크기 (기존 14px에서 15px로 적용됨) */
   line-height: 1.4;          /* 줄 간격 (너무 넓지 않게 1.4로 고정) */
   word-break: break-word;    /* 긴 단어(URL 등)가 밖으로 튀어나가지 않게 줄바꿈 */
+  overflow: hidden;          /* 코드블록 등이 밖으로 튀어나가지 않게 */
+  min-width: 0;              /* flex child shrink 허용 */
 }
 
 /* ─────────────────────────────────────────────
@@ -127,7 +135,8 @@
   
   /* 위아래 패딩은 0으로 없애고, 왼쪽만 20px 띄워서 아바타와 간격 확보 */
   padding: 0 0 0 20px !important;   
-min-width: 600px;  
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Winter 메시지 시간 위치 보정 */

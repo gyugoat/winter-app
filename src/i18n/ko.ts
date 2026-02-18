@@ -161,4 +161,7 @@ export const ko: Record<TranslationKey, string> = {
   folderLoading: '로딩 중...',
   folderCreate: '폴더 만들기',
   folderCreatePlaceholder: '새 폴더 이름...',
+  questionSkip: '건너뛰기',
+  questionConfirm: '확인',
+  questionCustomPlaceholder: '직접 입력...',
 };

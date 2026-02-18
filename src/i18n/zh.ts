@@ -158,4 +158,7 @@ export const zh: Record<TranslationKey, string> = {
   folderLoading: '加载中...',
   folderCreate: '新建文件夹',
   folderCreatePlaceholder: '新文件夹名称...',
+  questionSkip: '跳过',
+  questionConfirm: '确认',
+  questionCustomPlaceholder: '输入自定义答案...',
 };

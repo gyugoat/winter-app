@@ -1,0 +1,166 @@
+@keyframes questionSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.question-dock {
+  margin: 0 12px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  animation: questionSlideIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.question-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 10px;
+  padding-right: 24px;
+}
+
+.question-dismiss {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.question-dismiss:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.question-dock-inner {
+  position: relative;
+}
+
+.question-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.question-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel, var(--bg-elevated));
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  text-align: left;
+}
+
+.question-option:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.question-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.question-option-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.question-option-desc {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.question-option.selected .question-option-desc {
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+.question-custom {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  transition: border-color 0.15s;
+}
+
+.question-custom::placeholder {
+  color: var(--text-muted);
+}
+
+.question-custom:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.question-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.question-btn-skip {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 5px 10px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.question-btn-skip:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.question-btn-confirm {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-on-accent);
+  background: var(--accent);
+  padding: 5px 14px;
+  border-radius: 6px;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.question-btn-confirm:hover {
+  background: var(--accent-hover);
+}
+
+.question-btn-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

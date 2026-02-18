@@ -120,16 +120,14 @@ export function useChat() {
     return () => clearInterval(interval);
   }, []);
 
-  // Debounced save to store whenever sessions/activeSessionId/isDraft change
   useEffect(() => {
-    if (!loaded) return; // Don't save before initial load
+    if (!loaded || isStreaming) return;
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       const store = storeRef.current;
       if (!store) return;
       try {
-        // Strip isStreaming from messages before saving
           const toSave = sessions.map((s) => ({
             ...s,
             messages: s.messages.map(({ isStreaming: _, statusText: _st, ...rest }) => rest),
@@ -139,14 +137,14 @@ export function useChat() {
         await store.set(STORE_KEY_IS_DRAFT, isDraft);
         await store.save();
       } catch {
-        // Silent fail on save — don't crash the app
+        // Silent fail on save
       }
     }, SAVE_DEBOUNCE_MS);
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [sessions, activeSessionId, isDraft, loaded]);
+  }, [sessions, activeSessionId, isDraft, loaded, isStreaming]);
 
   const activeSession = activeSessionId
     ? sessions.find((s) => s.id === activeSessionId) ?? null
@@ -180,56 +178,55 @@ export function useChat() {
         messages: [...s.messages, { ...replyMsg, statusText: 'thinking' }],
       }));
 
+      // Accumulate content in closure, throttle setState to every 80ms
+      let accumulatedContent = '';
+      let currentStatusText: string | undefined = 'thinking';
+      let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const flushToState = () => {
+        flushTimer = null;
+        updateSession(sessionId, (s) => ({
+          ...s,
+          messages: s.messages.map((m) =>
+            m.id === replyId ? { ...m, content: accumulatedContent, statusText: currentStatusText } : m
+          ),
+        }));
+      };
+
+      const scheduleFlush = () => {
+        if (!flushTimer) {
+          flushTimer = setTimeout(flushToState, 80);
+        }
+      };
+
       const onEvent = new Channel<ChatStreamEvent>();
       onEvent.onmessage = (event: ChatStreamEvent) => {
         if (cancelledRef.current) return;
         if (event.event === 'delta') {
-          const text = event.data.text;
-          updateSession(sessionId, (s) => ({
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === replyId ? { ...m, content: m.content + text, statusText: undefined } : m
-            ),
-          }));
+          accumulatedContent += event.data.text;
+          currentStatusText = undefined;
+          scheduleFlush();
         } else if (event.event === 'tool_start') {
           const { name } = event.data;
-          const label = `\n\n---\n**[Tool: ${name}]** running...\n`;
-          updateSession(sessionId, (s) => ({
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === replyId ? { ...m, content: m.content + label } : m
-            ),
-          }));
+          accumulatedContent += `\n\n---\n**[Tool: ${name}]** running...\n`;
+          scheduleFlush();
         } else if (event.event === 'tool_end') {
           const { result } = event.data;
           const trimmed = result.length > 2000 ? result.slice(0, 2000) + '\n...(truncated)' : result;
-          const block = `\n\`\`\`\n${trimmed}\n\`\`\`\n`;
-          updateSession(sessionId, (s) => ({
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === replyId ? { ...m, content: m.content + block } : m
-            ),
-          }));
+          accumulatedContent += `\n\`\`\`\n${trimmed}\n\`\`\`\n`;
+          scheduleFlush();
         } else if (event.event === 'ollama_status') {
           const st = event.data.status;
           const label = st === 'compressing' ? '\n*Compressing conversation history...*\n'
             : st === 'summarizing' ? '\n*Summarizing tool output...*\n'
             : '';
           if (label) {
-            updateSession(sessionId, (s) => ({
-              ...s,
-              messages: s.messages.map((m) =>
-                m.id === replyId ? { ...m, content: m.content + label } : m
-              ),
-            }));
+            accumulatedContent += label;
+            scheduleFlush();
           }
         } else if (event.event === 'status') {
-          updateSession(sessionId, (s) => ({
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === replyId ? { ...m, statusText: event.data.text } : m
-            ),
-          }));
+          currentStatusText = event.data.text;
+          scheduleFlush();
         } else if (event.event === 'usage') {
           const delta = { input: event.data.input_tokens, output: event.data.output_tokens };
           setUsage((prev) => ({ input: prev.input + delta.input, output: prev.output + delta.output }));
@@ -242,14 +239,16 @@ export function useChat() {
             return next;
           });
         } else if (event.event === 'stream_end') {
+          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
           updateSession(sessionId, (s) => ({
             ...s,
             messages: s.messages.map((m) =>
-              m.id === replyId ? { ...m, isStreaming: false, statusText: undefined } : m
+              m.id === replyId ? { ...m, content: accumulatedContent, isStreaming: false, statusText: undefined } : m
             ),
           }));
           setIsStreaming(false);
         } else if (event.event === 'error') {
+          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
           const errText = event.data.message;
           updateSession(sessionId, (s) => ({
             ...s,

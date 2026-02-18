@@ -12,8 +12,10 @@ import { FileViewer } from './FileViewer';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { useChat } from '../hooks/useChat';
 import { useShortcuts } from '../hooks/useShortcuts';
+import { useQuestion } from '../hooks/useQuestion';
 import { useI18n } from '../i18n';
 import type { TranslationKey } from '../i18n';
+import { QuestionDock } from './QuestionDock';
 import '../styles/chat.css';
 
 export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive' | 'ollama' | 'folder';
@@ -150,6 +152,10 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   }), [addSession, sessions, activeSessionId, switchSession, deleteSession, archiveSession, isStreaming, showToast, toggleSearch, abortOpencode]);
 
   const { addToHistory, getPreviousSent, getNextSent, resetHistoryIndex } = useShortcuts(shortcutActions);
+  const { pending: pendingQuestion, reply: replyQuestion, reject: rejectQuestion } = useQuestion(
+    activeSession.ocSessionId,
+    isStreaming
+  );
 
   const handleSendMessage = useCallback((text: string, images?: import('../types').ImageAttachment[]) => {
     addToHistory(text);
@@ -304,6 +310,13 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
         ) : (
           <>
             <MessageList messages={activeSession.messages} searchQuery={searchQuery} />
+            {pendingQuestion && (
+              <QuestionDock
+                request={pendingQuestion}
+                onReply={replyQuestion}
+                onReject={rejectQuestion}
+              />
+            )}
             <MessageInput
               onSend={handleSendMessage}
               disabled={isStreaming}
