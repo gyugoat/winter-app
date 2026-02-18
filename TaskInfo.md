@@ -20,6 +20,7 @@
 src/                          # React frontend
 ├── components/               # UI components (Chat, Sidebar, Settings, etc.)
 ├── hooks/                    # Custom React hooks (useChat, useAuth, useFileChanges, etc.)
+├── workers/                  # Web Workers (markdown.worker.ts — marked + hljs off main thread)
 ├── i18n/                     # Internationalization (en, ko, ja, zh)
 ├── styles/                   # CSS modules per component
 ├── data/                     # Static data (MBTI personalities)
@@ -49,4 +50,4 @@ src-tauri/                    # Rust backend
 
 ## Current Version
 
-`1.2.0`
+`1.4.0`
