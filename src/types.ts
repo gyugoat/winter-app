@@ -19,7 +19,6 @@ export interface Session {
   messages: Message[];
   createdAt: number;
   archived?: boolean;
-  ocSessionId?: string;
 }
 
 export type ChatStreamEvent =
