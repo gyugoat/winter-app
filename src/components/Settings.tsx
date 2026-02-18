@@ -564,8 +564,7 @@ function FolderBrowserContent({
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:6096/path')
-      .then(r => r.json())
+    invoke<{ home?: string }>('opencode_get_path')
       .then(d => { if (d.home) homePathRef.current = d.home; })
       .catch(() => {});
   }, []);
@@ -574,14 +573,13 @@ function FolderBrowserContent({
     setLoading(true);
     const relPath = toRel(dirPath);
     try {
-      const res = await fetch(`http://localhost:6096/file?path=${encodeURIComponent(relPath)}`);
-      if (!res.ok) { setLoading(false); return; }
-      const data = await res.json();
+      const data = await invoke<Array<{ name: string; absolute: string; type: string; ignored: boolean }>>('opencode_list_files', { path: relPath }).catch(() => null);
+      if (!data) { setLoading(false); return; }
       if (Array.isArray(data)) {
         const filtered = data
-          .filter((f: { type: string; ignored: boolean }) => f.type === 'directory' && !f.ignored)
-          .sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
-          .map((f: { name: string; absolute: string }) => ({ name: f.name, absolute: f.absolute }));
+          .filter((f) => f.type === 'directory' && !f.ignored)
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((f) => ({ name: f.name, absolute: f.absolute }));
         setDirs(filtered);
         setBrowsePath(dirPath);
         setSearchValue('');

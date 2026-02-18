@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { FileChange, FileTreeNode } from '../types';
-
-const API_BASE = 'http://localhost:6096';
 const POLL_INTERVAL = 5000;
 
 export type ViewMode = 'changes' | 'all';
@@ -121,9 +120,7 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
 
   const fetchHomePath = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/path`);
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await invoke<{ home?: string; worktree?: string; directory?: string }>('opencode_get_path');
       if (data.home) homePathRef.current = data.home;
       if (data.worktree) worktreeRef.current = data.worktree;
       if (data.directory) opencodeDirRef.current = data.directory;
@@ -133,9 +130,7 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
 
   const fetchSessionChanges = useCallback(async (sessionId: string): Promise<FileChange[]> => {
     try {
-      const res = await fetch(`${API_BASE}/session/${encodeURIComponent(sessionId)}/message`);
-      if (!res.ok) return [];
-      const messages: Array<{ parts: Array<{ type: string; tool?: string; state?: { status?: string; input?: Record<string, string>; metadata?: { exists?: boolean; output?: string; exit?: number } } }> }> = await res.json();
+      const messages: Array<{ parts: Array<{ type: string; tool?: string; state?: { status?: string; input?: Record<string, string>; metadata?: { exists?: boolean; output?: string; exit?: number } } }> }> = await invoke('opencode_get_messages', { sessionId });
 
       const fileTools = new Set(['write', 'edit', 'multiEdit', 'multi_edit']);
       const bashTools = new Set(['bash', 'shell', 'shell_exec']);
@@ -230,9 +225,7 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
     if (!browseDir) return;
     const relPath = homePathRef.current ? toRelativePath(browseDir, homePathRef.current) : browseDir;
     try {
-      const res = await fetch(`${API_BASE}/file?path=${encodeURIComponent(relPath)}`);
-      if (!res.ok) return;
-      const data: ApiFileEntry[] = await res.json();
+      const data: ApiFileEntry[] = await invoke('opencode_list_files', { path: relPath });
       const tree = apiFilesToTree(data, changesMapRef.current);
 
       const existingPaths = new Set(data.map(f => f.absolute));
@@ -258,9 +251,7 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
   const loadChildren = useCallback(async (dirPath: string) => {
     const relPath = homePathRef.current ? toRelativePath(dirPath, homePathRef.current) : dirPath;
     try {
-      const res = await fetch(`${API_BASE}/file?path=${encodeURIComponent(relPath)}`);
-      if (!res.ok) return;
-      const data: ApiFileEntry[] = await res.json();
+      const data: ApiFileEntry[] = await invoke('opencode_list_files', { path: relPath });
       const children = apiFilesToTree(data, changesMapRef.current);
 
       setAllFilesTree((prev) => {

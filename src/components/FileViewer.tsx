@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import hljs from 'highlight.js';
 import '../styles/fileviewer.css';
-
-const API_BASE = 'http://localhost:6096';
 
 interface FileViewerProps {
   filePath: string;
@@ -40,14 +39,8 @@ export function FileViewer({ filePath, homePath }: FileViewerProps) {
     setContent(null);
 
     const relPath = toRelativePath(filePath, homePath);
-    fetch(`${API_BASE}/file/content?path=${encodeURIComponent(relPath)}`, {
-      headers: { 'x-opencode-directory': homePath },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data: { type: string; content: string }) => {
+    invoke<{ type: string; content: string }>('opencode_file_content', { path: relPath })
+      .then((data) => {
         if (data.type === 'text') {
           setContent(data.content);
         } else {

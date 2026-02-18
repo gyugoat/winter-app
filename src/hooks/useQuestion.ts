@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 export type QuestionInfo = {
   question: string;
@@ -15,8 +16,6 @@ export type QuestionRequest = {
   tool?: { messageID: string; callID: string };
 };
 
-const BASE = 'http://localhost:6096';
-
 export function useQuestion(ocSessionId: string | undefined, isStreaming: boolean) {
   const [pending, setPending] = useState<QuestionRequest | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -24,9 +23,7 @@ export function useQuestion(ocSessionId: string | undefined, isStreaming: boolea
   const poll = useCallback(async () => {
     if (!ocSessionId) return;
     try {
-      const res = await fetch(`${BASE}/question`);
-      if (!res.ok) return;
-      const data: QuestionRequest[] = await res.json();
+      const data: QuestionRequest[] = await invoke('opencode_get_questions');
       const match = data.find((q) => q.sessionID === ocSessionId) ?? null;
       setPending(match);
     } catch {}
@@ -50,18 +47,14 @@ export function useQuestion(ocSessionId: string | undefined, isStreaming: boolea
 
   const reply = useCallback(async (requestID: string, answers: string[][]) => {
     try {
-      await fetch(`${BASE}/question/${requestID}/reply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers }),
-      });
+      await invoke('opencode_reply_question', { requestId: requestID, answers });
       setPending(null);
     } catch {}
   }, []);
 
   const reject = useCallback(async (requestID: string) => {
     try {
-      await fetch(`${BASE}/question/${requestID}/reject`, { method: 'POST' });
+      await invoke('opencode_reject_question', { requestId: requestID });
       setPending(null);
     } catch {}
   }, []);
