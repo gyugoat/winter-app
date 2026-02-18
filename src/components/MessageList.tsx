@@ -1,62 +1,74 @@
 import { useEffect, useRef, useMemo, useState, useCallback, memo } from 'react';
-import { Marked } from 'marked';
-import DOMPurify from 'dompurify';
-import hljs from 'highlight.js/lib/core';
 import { useI18n } from '../i18n';
-import javascript from 'highlight.js/lib/languages/javascript';
-import typescript from 'highlight.js/lib/languages/typescript';
-import python from 'highlight.js/lib/languages/python';
-import bash from 'highlight.js/lib/languages/bash';
-import jsonLang from 'highlight.js/lib/languages/json';
-import css from 'highlight.js/lib/languages/css';
-import xml from 'highlight.js/lib/languages/xml';
-import rust from 'highlight.js/lib/languages/rust';
-import sql from 'highlight.js/lib/languages/sql';
-import yamlLang from 'highlight.js/lib/languages/yaml';
-import markdownLang from 'highlight.js/lib/languages/markdown';
+import { useMarkdownWorker } from '../hooks/useMarkdownWorker';
 import type { Message } from '../types';
 import '../styles/messages.css';
 
-hljs.registerLanguage('javascript', javascript);
-hljs.registerLanguage('js', javascript);
-hljs.registerLanguage('jsx', javascript);
-hljs.registerLanguage('typescript', typescript);
-hljs.registerLanguage('ts', typescript);
-hljs.registerLanguage('tsx', typescript);
-hljs.registerLanguage('python', python);
-hljs.registerLanguage('py', python);
-hljs.registerLanguage('bash', bash);
-hljs.registerLanguage('sh', bash);
-hljs.registerLanguage('shell', bash);
-hljs.registerLanguage('json', jsonLang);
-hljs.registerLanguage('css', css);
-hljs.registerLanguage('html', xml);
-hljs.registerLanguage('xml', xml);
-hljs.registerLanguage('rust', rust);
-hljs.registerLanguage('rs', rust);
-hljs.registerLanguage('sql', sql);
-hljs.registerLanguage('yaml', yamlLang);
-hljs.registerLanguage('yml', yamlLang);
-hljs.registerLanguage('markdown', markdownLang);
-hljs.registerLanguage('md', markdownLang);
+function TypewriterStatus({ text }: { text: string }) {
+  const [displayed, setDisplayed] = useState('');
+  const [phase, setPhase] = useState<'typing' | 'hold' | 'erasing'>('typing');
+  const textRef = useRef(text);
+  const phaseRef = useRef(phase);
+  const displayedRef = useRef('');
 
-const marked = new Marked({
-  breaks: true,
-  gfm: true,
-});
+  useEffect(() => {
+    if (text !== textRef.current) {
+      textRef.current = text;
+      setPhase('erasing');
+    }
+  }, [text]);
 
-const renderer = {
-  code({ text, lang }: { text: string; lang?: string | undefined }) {
-    const language = lang && hljs.getLanguage(lang) ? lang : '';
-    const highlighted = language
-      ? hljs.highlight(text, { language }).value
-      : hljs.highlightAuto(text).value;
-    const encoded = encodeURIComponent(text);
-    return `<div class="code-block-wrap"><div class="code-block-header"><span class="code-block-lang">${language || 'text'}</span><button class="code-copy-btn" data-code="${encoded}">Copy</button></div><pre><code class="hljs${language ? ` language-${language}` : ''}">${highlighted}</code></pre></div>`;
-  },
-};
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
-marked.use({ renderer });
+  useEffect(() => {
+    displayedRef.current = displayed;
+  }, [displayed]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+
+    const tick = () => {
+      const currentPhase = phaseRef.current;
+      const currentDisplayed = displayedRef.current;
+      const target = textRef.current;
+
+      if (currentPhase === 'typing') {
+        if (currentDisplayed.length < target.length) {
+          const next = target.slice(0, currentDisplayed.length + 1);
+          setDisplayed(next);
+          timer = setTimeout(tick, 30);
+        } else {
+          setPhase('hold');
+          timer = setTimeout(tick, 800);
+        }
+      } else if (currentPhase === 'hold') {
+        setPhase('erasing');
+        timer = setTimeout(tick, 0);
+      } else {
+        if (currentDisplayed.length > 0) {
+          const next = currentDisplayed.slice(0, -1);
+          setDisplayed(next);
+          timer = setTimeout(tick, 15);
+        } else {
+          setPhase('typing');
+          timer = setTimeout(tick, 0);
+        }
+      }
+    };
+
+    timer = setTimeout(tick, 30);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <span className="status-label">
+      {displayed}
+      {phase !== 'erasing' && <span>...</span>}
+    </span>
+  );
+}
 
 interface MessageListProps {
   messages: Message[];
@@ -66,12 +78,6 @@ interface MessageListProps {
 function formatTime(ts: number): string {
   const d = new Date(ts);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function renderMarkdown(content: string): string {
-  const raw = marked.parse(content);
-  if (typeof raw !== 'string') return '';
-  return DOMPurify.sanitize(raw);
 }
 
 function escapeHtml(str: string): string {
@@ -93,32 +99,40 @@ function highlightText(text: string, query: string): string {
   );
 }
 
-const MessageRow = memo(function MessageRow({ msg, searchQuery }: { msg: Message; searchQuery: string }) {
-  const html = useMemo(() => {
-    if (msg.isStreaming) return null;
-    if (msg.role !== 'assistant' || !msg.content) return null;
-    const rendered = renderMarkdown(msg.content);
-    return searchQuery ? highlightText(rendered, searchQuery) : rendered;
-  }, [msg.role, msg.content, msg.isStreaming, searchQuery]);
+function highlightHtml(html: string, query: string): string {
+  if (!query) return html;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(${escaped})`, 'gi');
+  return html.replace(/(<[^>]*>)|([^<]+)/g, (_match, tag: string, text: string) => {
+    if (tag) return tag;
+    return text.replace(re, '<mark class="search-highlight">$1</mark>');
+  });
+}
+
+interface MessageRowProps {
+  msg: Message;
+  searchQuery: string;
+  html: string | null;
+}
+
+const MessageRow = memo(function MessageRow({ msg, searchQuery, html }: MessageRowProps) {
+  const isStatusOnly = !!(msg.statusText && msg.isStreaming && !msg.content);
+  const isStreamingContent = !!(msg.isStreaming && msg.content);
 
   return (
     <div className={`message-row ${msg.role}`}>
       {msg.role === 'assistant' && (
         <div className="message-avatar">
-          <div className="message-diamond" />
+          <div className={`message-diamond${isStatusOnly ? ' spinning' : ''}`} />
         </div>
       )}
       <div>
-        {msg.statusText && msg.isStreaming && !msg.content ? (
+        {isStatusOnly ? (
           <div className="message-bubble message-status">
-            {msg.statusText === 'thinking' ? (
-              <span className="thinking-dots"><span /><span /><span /></span>
-            ) : (
-              <span className="status-label">{msg.statusText}</span>
-            )}
+            <TypewriterStatus text={msg.statusText!} />
           </div>
         ) : html ? (
-          <div className="message-bubble message-bubble-markdown">
+          <div className={`message-bubble message-bubble-markdown${isStreamingContent ? ' streaming' : ''}`}>
             <div dangerouslySetInnerHTML={{ __html: html }} />
             {msg.statusText && msg.isStreaming && (
               <div className="message-inline-status">{msg.statusText}</div>
@@ -130,7 +144,7 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery }: { msg: Message
             dangerouslySetInnerHTML={{ __html: highlightText(msg.content, searchQuery) }}
           />
         ) : (
-          <div className="message-bubble">{msg.content}</div>
+          <div className={`message-bubble${isStreamingContent ? ' streaming' : ''}`}>{msg.content}</div>
         )}
         <div className={`message-time${msg.role === 'user' ? ' user' : ''}`}>
           {formatTime(msg.timestamp)}
@@ -143,7 +157,8 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery }: { msg: Message
   prev.msg.content === next.msg.content &&
   prev.msg.isStreaming === next.msg.isStreaming &&
   prev.msg.statusText === next.msg.statusText &&
-  prev.searchQuery === next.searchQuery
+  prev.searchQuery === next.searchQuery &&
+  prev.html === next.html
 );
 
 const PAGE_SIZE = 10;
@@ -151,10 +166,10 @@ const LOAD_MORE_SIZE = 10;
 
 export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
   const { t } = useI18n();
+  const { render: renderMarkdown } = useMarkdownWorker();
   const bottomRef = useRef<HTMLDivElement>(null);
   const sessionKeyRef = useRef<string | undefined>(undefined);
   const [maxVisible, setMaxVisible] = useState(PAGE_SIZE);
-  const [renderCount, setRenderCount] = useState(PAGE_SIZE);
 
   const currentSessionKey = messages[0]?.id;
 
@@ -162,7 +177,6 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
     if (currentSessionKey !== sessionKeyRef.current) {
       sessionKeyRef.current = currentSessionKey;
       setMaxVisible(PAGE_SIZE);
-      setRenderCount(1);
     }
   }, [currentSessionKey]);
 
@@ -200,25 +214,14 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
     [messages, searchQuery]
   );
 
-  const pageLimit = Math.min(maxVisible, filteredMessages.length);
-
-  useEffect(() => {
-    if (renderCount >= pageLimit) return;
-    const id = requestAnimationFrame(() => {
-      setRenderCount(prev => prev + 1);
-    });
-    return () => cancelAnimationFrame(id);
-  }, [renderCount, pageLimit]);
-
   useEffect(() => {
     if (currentSessionKey === sessionKeyRef.current && filteredMessages.length > maxVisible) {
       setMaxVisible(filteredMessages.length);
-      setRenderCount(filteredMessages.length);
     }
   }, [filteredMessages.length, maxVisible, currentSessionKey]);
 
-  const displayCount = Math.min(renderCount, pageLimit);
-  const hasMore = filteredMessages.length > maxVisible;
+  const displayCount = Math.min(maxVisible, filteredMessages.length);
+  const hasMore = filteredMessages.length > displayCount;
 
   const visibleMessages = useMemo(
     () => {
@@ -247,9 +250,12 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
   return (
     <div className="message-list">
       <div ref={bottomRef} />
-      {visibleMessages.map((msg) => (
-        <MessageRow key={msg.id} msg={msg} searchQuery={searchQuery} />
-      ))}
+      {visibleMessages.map((msg) => {
+        const needsMarkdown = msg.role === 'assistant' && !!msg.content && !msg.isStreaming;
+        const rawHtml = needsMarkdown ? renderMarkdown(msg.id, msg.content) : null;
+        const html = rawHtml && searchQuery ? highlightHtml(rawHtml, searchQuery) : rawHtml;
+        return <MessageRow key={msg.id} msg={msg} searchQuery={searchQuery} html={html} />;
+      })}
       {hasMore && (
         <button className="message-show-more" onClick={handleShowMore}>
           {t('showMore')} ({filteredMessages.length - maxVisible})
