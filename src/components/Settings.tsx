@@ -555,20 +555,29 @@ function FolderBrowserContent({
   const createPopupRef = useRef<HTMLDivElement>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  const toRel = useCallback((abs: string) => {
+    const home = homePathRef.current;
+    if (!home) return abs;
+    if (abs === home) return '.';
+    if (abs.startsWith(home + '/')) return abs.slice(home.length + 1);
+    return abs;
+  }, []);
+
   useEffect(() => {
-    invoke<{ home?: string }>('native_get_home')
+    invoke<{ home?: string }>('opencode_get_path')
       .then(d => { if (d.home) homePathRef.current = d.home; })
       .catch(() => {});
   }, []);
 
   const navigateTo = useCallback(async (dirPath: string, pushHistory = true) => {
     setLoading(true);
+    const relPath = toRel(dirPath);
     try {
-      const data = await invoke<Array<{ name: string; absolute: string; type: string; symlink: boolean }>>('native_list_files', { path: dirPath }).catch(() => null);
+      const data = await invoke<Array<{ name: string; absolute: string; type: string; ignored: boolean }>>('opencode_list_files', { path: relPath }).catch(() => null);
       if (!data) { setLoading(false); return; }
       if (Array.isArray(data)) {
         const filtered = data
-          .filter((f) => f.type === 'directory')
+          .filter((f) => f.type === 'directory' && !f.ignored)
           .sort((a, b) => a.name.localeCompare(b.name))
           .map((f) => ({ name: f.name, absolute: f.absolute }));
         setDirs(filtered);
@@ -584,7 +593,7 @@ function FolderBrowserContent({
       }
     } catch { /* best-effort */ }
     setLoading(false);
-  }, [historyIdx]);
+  }, [toRel, historyIdx]);
 
   const goBack = () => {
     if (historyIdx <= 0) return;

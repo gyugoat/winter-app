@@ -8,6 +8,12 @@ interface FileViewerProps {
   homePath: string;
 }
 
+function toRelativePath(absPath: string, homePath: string): string {
+  if (absPath === homePath) return '.';
+  if (absPath.startsWith(homePath + '/')) return absPath.slice(homePath.length + 1);
+  return absPath;
+}
+
 function extToLang(path: string): string | undefined {
   const ext = path.split('.').pop()?.toLowerCase();
   const map: Record<string, string> = {
@@ -32,7 +38,8 @@ export function FileViewer({ filePath, homePath }: FileViewerProps) {
     setError(null);
     setContent(null);
 
-    invoke<{ type: string; content: string }>('native_file_content', { path: filePath })
+    const relPath = toRelativePath(filePath, homePath);
+    invoke<{ type: string; content: string }>('opencode_file_content', { path: relPath })
       .then((data) => {
         if (data.type === 'text') {
           setContent(data.content);

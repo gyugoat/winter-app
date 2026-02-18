@@ -1,4 +1,5 @@
 mod ollama;
+mod opencode;
 
 use futures::StreamExt;
 use reqwest::Client;
@@ -684,10 +685,10 @@ async fn set_session_key(app: AppHandle, key: String) -> Result<(), String> {
 async fn get_working_directory(app: AppHandle) -> Result<String, String> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
     let dir = store
-        .get("working_directory")
+        .get("opencode_directory")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| std::env::var("HOME").unwrap_or_else(|_| "/home".to_string()));
+        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string());
     Ok(dir)
 }
 
@@ -704,12 +705,107 @@ async fn set_working_directory(app: AppHandle, directory: String) -> Result<(), 
         return Err(format!("Not a directory: {}", directory));
     }
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
-    store.set("working_directory", json!(directory));
+    store.set("opencode_directory", json!(directory));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
 }
 
+// ── OpenCode Bridge Commands ───────────────────────────────────────
 
+const DEFAULT_OPENCODE_URL: &str = "http://127.0.0.1:6096";
+
+#[tauri::command]
+async fn opencode_check(app: AppHandle) -> Result<bool, String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    let enabled = store
+        .get("opencode_enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    if !enabled {
+        return Ok(false);
+    }
+
+    let base_url = store
+        .get("opencode_url")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_URL.to_string());
+    let directory = store
+        .get("opencode_directory")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string());
+
+    let client = opencode::OpenCodeClient::new(base_url, directory);
+    Ok(client.health_check().await)
+}
+
+#[tauri::command]
+async fn opencode_create_session(app: AppHandle) -> Result<String, String> {
+    let client = get_opencode_client(&app)?;
+    let session = client.create_session().await?;
+    Ok(session.id)
+}
+
+#[tauri::command]
+async fn opencode_send(
+    app: AppHandle,
+    oc_session_id: String,
+    content: String,
+    on_event: Channel<ChatStreamEvent>,
+) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    let abort_flag = app.state::<Arc<AtomicBool>>();
+    abort_flag.store(false, Ordering::SeqCst);
+    tokio::task::yield_now().await;
+    abort_flag.store(false, Ordering::SeqCst);
+
+    if on_event.send(ChatStreamEvent::StreamStart).is_err() {
+        return Ok(());
+    }
+
+    let prompt_client = get_opencode_client(&app)?;
+    let session_id_clone = oc_session_id.clone();
+    let content_clone = content;
+
+    let mbti_modifier = app
+        .store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get(STORE_KEY_MBTI_MODIFIER))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty());
+
+    let known_msg_ids = client.get_known_message_ids(&oc_session_id).await;
+
+    let sse_handle = tokio::spawn({
+        let session_id = oc_session_id;
+        let on_ev = on_event;
+        let flag = abort_flag.inner().clone();
+        async move {
+            client.subscribe_sse(&session_id, &on_ev, &flag, known_msg_ids).await
+        }
+    });
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    if let Err(e) = prompt_client.prompt_async(&session_id_clone, &content_clone, mbti_modifier.as_deref()).await {
+        abort_flag.store(true, Ordering::SeqCst);
+        return Err(e);
+    }
+
+    sse_handle
+        .await
+        .map_err(|e| format!("SSE task panicked: {}", e))?
+}
+
+#[tauri::command]
+async fn opencode_abort(app: AppHandle, oc_session_id: String) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    app.state::<Arc<AtomicBool>>()
+        .store(true, Ordering::SeqCst);
+    client.abort(&oc_session_id).await
+}
 
 #[tauri::command]
 async fn create_directory(path: String) -> Result<(), String> {
@@ -769,61 +865,71 @@ async fn search_directories(root: String, query: String, max_results: Option<usi
     Ok(results)
 }
 
-// ── Native File Commands (replaces OpenCode proxy) ─────────────────
+const DEFAULT_OPENCODE_DIR: &str = "/home/gyugo/.winter/workspace";
 
-#[tauri::command]
-async fn native_get_home() -> Result<Value, String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home".to_string());
-    Ok(json!({ "home": home }))
+fn get_opencode_url(app: &AppHandle) -> String {
+    app.store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get("opencode_url"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_URL.to_string())
+}
+
+fn get_opencode_dir(app: &AppHandle) -> String {
+    app.store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get("opencode_directory"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string())
+}
+
+fn get_opencode_client(app: &AppHandle) -> Result<opencode::OpenCodeClient, String> {
+    Ok(opencode::OpenCodeClient::new(get_opencode_url(app), get_opencode_dir(app)))
 }
 
 #[tauri::command]
-async fn native_list_files(path: String) -> Result<Value, String> {
-    let p = std::path::Path::new(&path);
-    if !p.is_dir() {
-        return Err(format!("Not a directory: {}", path));
-    }
-    let mut entries = tokio::fs::read_dir(&path)
-        .await
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
-    let mut items = Vec::new();
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let ft = entry.file_type().await.ok();
-        let is_dir = ft.as_ref().map(|f| f.is_dir()).unwrap_or(false);
-        let is_symlink = ft.as_ref().map(|f| f.is_symlink()).unwrap_or(false);
-        let abs = entry.path().to_string_lossy().to_string();
-        items.push(json!({
-            "name": name,
-            "type": if is_dir { "directory" } else { "file" },
-            "symlink": is_symlink,
-            "absolute": abs,
-        }));
-    }
-    items.sort_by(|a, b| {
-        let a_type = a["type"].as_str().unwrap_or("");
-        let b_type = b["type"].as_str().unwrap_or("");
-        let a_name = a["name"].as_str().unwrap_or("");
-        let b_name = b["name"].as_str().unwrap_or("");
-        b_type.cmp(a_type).then(a_name.cmp(b_name))
-    });
-    Ok(json!(items))
+async fn opencode_get_path(app: AppHandle) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    client.get_path_info().await
 }
 
 #[tauri::command]
-async fn native_file_content(path: String) -> Result<Value, String> {
-    let p = std::path::Path::new(&path);
-    if !p.is_file() {
-        return Err(format!("Not a file: {}", path));
-    }
-    let meta = tokio::fs::metadata(&path).await.map_err(|e| format!("{}", e))?;
-    if meta.len() > 2 * 1024 * 1024 {
-        return Err("File too large (>2MB)".to_string());
-    }
-    let content = tokio::fs::read_to_string(&path)
-        .await
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    Ok(json!({ "type": "text", "content": content }))
+async fn opencode_list_files(app: AppHandle, path: String) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    client.list_files(&path).await
+}
+
+#[tauri::command]
+async fn opencode_file_content(app: AppHandle, path: String) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    let dir = get_opencode_dir(&app);
+    client.file_content(&path, &dir).await
+}
+
+#[tauri::command]
+async fn opencode_get_questions(app: AppHandle) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    client.get_questions().await
+}
+
+#[tauri::command]
+async fn opencode_reply_question(app: AppHandle, request_id: String, answers: Value) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    client.reply_question(&request_id, answers).await
+}
+
+#[tauri::command]
+async fn opencode_reject_question(app: AppHandle, request_id: String) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    client.reject_question(&request_id).await
+}
+
+#[tauri::command]
+async fn opencode_get_messages(app: AppHandle, session_id: String) -> Result<Value, String> {
+    let client = get_opencode_client(&app)?;
+    client.get_session_messages(&session_id).await
 }
 
 #[tauri::command]
@@ -924,7 +1030,10 @@ pub fn run() {
             send_feedback, abort_stream, ollama_is_installed, ollama_install,
             ollama_check, ollama_models, ollama_toggle, ollama_set_config,
             fetch_claude_usage, set_session_key,
-            native_get_home, native_list_files, native_file_content,
+            opencode_check, opencode_create_session, opencode_send, opencode_abort,
+            opencode_get_path, opencode_list_files, opencode_file_content,
+            opencode_get_questions, opencode_reply_question, opencode_reject_question,
+            opencode_get_messages,
             get_working_directory, set_working_directory, create_directory, search_directories,
         ])
         .run(tauri::generate_context!())
