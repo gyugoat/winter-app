@@ -106,6 +106,8 @@ export function Splash({ onDone, returning = false }: SplashProps) {
     let spawnAccum = 0;
     let settledY = 0;
     let settledVY = 0;
+    let lastTime = 0;
+    const TARGET_INTERVAL = 1000 / 60; // 60fps baseline (Linux refresh rate)
 
     const snowVar = getComputedStyle(document.documentElement).getPropertyValue('--snow-particle').trim() || 'rgba(200,220,255,1)';
     const rgbMatch = snowVar.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
@@ -114,12 +116,16 @@ export function Splash({ onDone, returning = false }: SplashProps) {
     const sB = rgbMatch ? +rgbMatch[3] : 255;
 
     function draw(now: number) {
+      if (!lastTime) lastTime = now;
+      const dt = Math.min(now - lastTime, 100) / TARGET_INTERVAL;
+      lastTime = now;
+
       ctx.clearRect(0, 0, W, H);
 
       const clicked = clickedRef.current;
 
       if (!clicked) {
-        spawnAccum += 0.8;
+        spawnAccum += 0.8 * dt;
         let active = 0;
         for (let i = 0; i < particles.length; i++) {
           if (!particles[i].settled) active++;
@@ -142,7 +148,7 @@ export function Splash({ onDone, returning = false }: SplashProps) {
           const dist = Math.abs(d * COL_W);
           const meltStrength = 1 - (dist / MELT_RADIUS);
           if (meltStrength > 0) {
-            heightMap[c] *= (1 - meltStrength * 0.15);
+            heightMap[c] *= Math.pow(1 - meltStrength * 0.15, dt);
           }
         }
         // Diamond melt — clear settled snow on offscreen canvas near center
@@ -150,15 +156,15 @@ export function Splash({ onDone, returning = false }: SplashProps) {
         offCtx.globalCompositeOperation = 'destination-out';
         offCtx.beginPath();
         offCtx.arc(cx, cy + 40, MELT_RADIUS * 0.7, 0, Math.PI * 2);
-        offCtx.fillStyle = 'rgba(0,0,0,0.15)';
+        offCtx.fillStyle = `rgba(0,0,0,${Math.min(1, 0.15 * dt)})`;
         offCtx.fill();
         offCtx.restore();
       }
 
       // When clicked, settled snow falls with gravity
       if (clicked) {
-        settledVY += 0.35;
-        settledY += settledVY;
+        settledVY += 0.35 * dt;
+        settledY += settledVY * dt;
       }
 
       // Blit settled snow layer (single drawImage — O(1))
@@ -169,20 +175,20 @@ export function Splash({ onDone, returning = false }: SplashProps) {
       for (const p of particles) {
         if (clicked) {
           p.settled = false;
-          p.vy += 0.35;
-          p.y += p.vy;
-          p.x += p.drift * 0.5;
+          p.vy += 0.35 * dt;
+          p.y += p.vy * dt;
+          p.x += p.drift * 0.5 * dt;
           if (p.y < H + 20) allOffScreen = false;
         } else if (!p.settled) {
-          p.y += p.speed;
-          p.x += p.drift + Math.sin(now * 0.0009 + p.wobble) * 0.2;
+          p.y += p.speed * dt;
+          p.x += (p.drift + Math.sin(now * 0.0009 + p.wobble) * 0.2) * dt;
 
           const col = Math.max(0, Math.min(COLS - 1, Math.floor(p.x / COL_W)));
           const groundY = STACK_Y - heightMap[col];
           if (p.y + p.size >= groundY) {
             const distFromCenter = Math.abs(p.x - cx);
             if (distFromCenter < MELT_RADIUS * 0.6) {
-              p.alpha *= 0.92;
+              p.alpha *= Math.pow(0.92, dt);
               if (p.alpha < 0.02) { p.settled = true; p.alpha = 0; }
               continue;
             }
