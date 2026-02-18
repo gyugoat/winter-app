@@ -310,7 +310,7 @@ fn extract_prev_count(messages: &[ChatMessage], compress_start: usize) -> usize 
     if let MessageContent::Text(ref t) = messages[compress_start - 2].content {
         // Parse "[Prior context — 12 messages compressed]"
         if let Some(rest) = t.strip_prefix(PRIOR_CONTEXT_PREFIX) {
-            if let Some(num_str) = rest.trim_start().split_whitespace().next() {
+            if let Some(num_str) = rest.split_whitespace().next() {
                 return num_str.parse().unwrap_or(0);
             }
         }
