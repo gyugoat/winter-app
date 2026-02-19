@@ -22,23 +22,26 @@ impl MessageMode {
             Self::Normal => None,
             Self::Search => Some(
                 "[search-mode]\n\
-                MAXIMIZE SEARCH EFFORT. You MUST use web search tools extensively.\n\
-                - Search for multiple angles on the topic\n\
-                - Cross-reference sources\n\
-                - Synthesize findings into a comprehensive answer\n\
-                - Always cite sources with URLs\n\
-                - If first search insufficient, search again with different terms\n\
-                Do NOT answer from memory alone. SEARCH FIRST.",
+                MAXIMIZE SEARCH EFFORT. Launch multiple background agents IN PARALLEL:\n\
+                - explore agents (codebase patterns, file structures, ast-grep)\n\
+                - librarian agents (remote repos, official docs, GitHub examples)\n\
+                Plus direct tools: Grep, ripgrep (rg), ast-grep (sg)\n\
+                NEVER stop at first result - be exhaustive.",
             ),
             Self::Analyze => Some(
                 "[analyze-mode]\n\
-                ANALYSIS MODE. Perform deep, structured investigation.\n\
-                - Break the problem into components\n\
-                - Examine each component systematically\n\
-                - Identify patterns, anomalies, and root causes\n\
-                - Consider multiple hypotheses before concluding\n\
-                - Output: structured analysis with clear sections\n\
-                Think step by step. Show your reasoning.",
+                ANALYSIS MODE. Gather context before diving deep:\n\
+                \n\
+                CONTEXT GATHERING (parallel):\n\
+                - 1-2 explore agents (codebase patterns, implementations)\n\
+                - 1-2 librarian agents (if external library involved)\n\
+                - Direct tools: Grep, AST-grep, LSP for targeted searches\n\
+                \n\
+                IF COMPLEX - DO NOT STRUGGLE ALONE. Consult specialists:\n\
+                - **Oracle**: Conventional problems (architecture, debugging, complex logic)\n\
+                - **Artistry**: Non-conventional problems (different approach needed)\n\
+                \n\
+                SYNTHESIZE findings before proceeding.",
             ),
         }
     }

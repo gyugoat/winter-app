@@ -284,12 +284,7 @@ async fn exchange_code(app: AppHandle, code: String) -> Result<(), String> {
 /// Returns true if a non-expired access token is stored.
 #[tauri::command]
 async fn is_authenticated(app: AppHandle) -> Result<bool, String> {
-    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
-    let access_token = store.get(STORE_KEY_ACCESS);
-    let is_valid = access_token
-        .and_then(|v| v.as_str().map(|s| !s.is_empty()))
-        .unwrap_or(false);
-    Ok(is_valid)
+    Ok(get_access_token(&app).is_ok())
 }
 
 /// Clears all stored OAuth tokens, effectively logging the user out.
@@ -744,6 +739,7 @@ async fn opencode_send(
     app: AppHandle,
     oc_session_id: String,
     content: String,
+    mode: Option<MessageMode>,
     on_event: Channel<ChatStreamEvent>,
 ) -> Result<(), String> {
     let client = get_opencode_client(&app)?;
@@ -758,7 +754,7 @@ async fn opencode_send(
 
     let prompt_client = get_opencode_client(&app)?;
     let session_id_clone = oc_session_id.clone();
-    let content_clone = content;
+    let content_clone = mode.unwrap_or(MessageMode::Normal).apply(&content);
 
     let mbti_modifier = app
         .store(STORE_FILE)

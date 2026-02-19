@@ -30,6 +30,7 @@ import { useQuestion } from '../hooks/useQuestion';
 import { useAgents } from '../hooks/useAgents';
 import { useI18n } from '../i18n';
 import type { TranslationKey } from '../i18n';
+import type { MessageMode } from '../types';
 import { QuestionDock } from './QuestionDock';
 import { AgentBar } from './AgentBar';
 import '../styles/chat.css';
@@ -176,10 +177,10 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     isStreaming
   );
 
-  const handleSendMessage = useCallback((text: string, images?: import('../types').ImageAttachment[]) => {
+  const handleSendMessage = useCallback((text: string, images?: import('../types').ImageAttachment[], mode?: MessageMode) => {
     addToHistory(text);
     resetHistoryIndex();
-    sendMessage(text, images);
+    sendMessage(text, images, mode);
   }, [sendMessage, addToHistory, resetHistoryIndex]);
 
   const triggerDiamondGlow = useCallback(() => {

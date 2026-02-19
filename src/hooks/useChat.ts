@@ -16,7 +16,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { load, type Store } from '@tauri-apps/plugin-store';
-import type { Message, Session, ChatStreamEvent, ImageAttachment } from '../types';
+import type { Message, Session, ChatStreamEvent, ImageAttachment, MessageMode } from '../types';
 
 const STORE_FILE = 'sessions.json';
 const STORE_KEY_SESSIONS = 'sessions';
@@ -175,7 +175,7 @@ export function useChat() {
   const cancelledRef = useRef(false);
 
   const streamResponse = useCallback(
-    (sessionId: string, allMessages: Message[], ocSessionId?: string) => {
+    (sessionId: string, allMessages: Message[], ocSessionId?: string, mode?: MessageMode) => {
       setIsStreaming(true);
       cancelledRef.current = false;
 
@@ -294,6 +294,7 @@ export function useChat() {
         invoke('opencode_send', {
           ocSessionId,
           content: lastMsg.content,
+          mode: mode || 'normal',
           onEvent,
         }).catch(handleError);
       } else {
@@ -321,7 +322,7 @@ export function useChat() {
   );
 
   const sendMessage = useCallback(
-    async (text: string, images?: ImageAttachment[]) => {
+    async (text: string, images?: ImageAttachment[], mode?: MessageMode) => {
       if (isStreaming) return;
 
       const userMsg: Message = {
@@ -353,7 +354,7 @@ export function useChat() {
         setSessions((prev) => [...prev, newSession]);
         setActiveSessionId(newSession.id);
         setIsDraft(false);
-        streamResponse(newSession.id, [userMsg], newSession.ocSessionId);
+        streamResponse(newSession.id, [userMsg], newSession.ocSessionId, mode);
         return;
       }
 
@@ -375,12 +376,12 @@ export function useChat() {
         try {
           const ocId = await invoke<string>('opencode_create_session');
           updateSession(activeSessionId, (s) => ({ ...s, ocSessionId: ocId }));
-          streamResponse(activeSessionId, allMessages, ocId);
+          streamResponse(activeSessionId, allMessages, ocId, mode);
         } catch {
-          streamResponse(activeSessionId, allMessages);
+          streamResponse(activeSessionId, allMessages, undefined, mode);
         }
       } else {
-        streamResponse(activeSessionId, allMessages, ocSessionId);
+        streamResponse(activeSessionId, allMessages, ocSessionId, mode);
       }
     },
     [activeSessionId, isDraft, isStreaming, sessions, updateSession, streamResponse, opencodeConnected]
