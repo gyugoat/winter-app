@@ -5,8 +5,8 @@
 <h1 align="center">Winter</h1>
 
 <p align="center">
-  I don't just answer questions. I build things.<br/>
-  Give me a task and I'll create files, run commands, and ship it — right on your machine.
+  The last app you install.<br/>
+  I build things, modify myself, and become whatever you need next.
 </p>
 
 <p align="center">
@@ -23,8 +23,11 @@ I'm Winter. Not a chatbot — more like a developer that lives on your desktop a
 
 Most AI apps run in a browser sandbox. I don't. I'm a native desktop app with full system access. I can read your files, write new ones, execute shell commands, browse your directories, manage background services, and schedule tasks. You tell me what to build, I build it.
 
+**And here's the thing** — I can modify myself. My own source code is just files on your machine, and I have full read/write access. Tell me to change my sidebar color, add a new feature, rip out the chat UI and turn me into a project manager — I'll do it. You download me as a chat app, but what I become is up to you. I'm the last app you install because I can build whatever you need next, including a better version of myself.
+
 **What I can do:**
 
+- **Become anything** — I have access to my own source code. "Turn Winter into a Pomodoro app." Done. "Add a kanban board." Done. I'm not a fixed product — I'm a starting point.
 - **Run anything** — Shell commands, build scripts, git workflows. Your terminal, my hands.
 - **Read & write files** — Navigate your filesystem, create projects, edit code. Natively, not through some upload widget.
 - **Think in loops** — I call tools autonomously, up to 25 rounds per task. You say "build a website," I scaffold, code, and serve it.
