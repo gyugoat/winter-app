@@ -76,7 +76,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     abortOpencode,
   } = useChat();
 
-  const [workingDirectory, setWorkingDirectory] = useState('/home/gyugo');
+  const [workingDirectory, setWorkingDirectory] = useState('');
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);

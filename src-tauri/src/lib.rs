@@ -48,8 +48,14 @@ const MAX_TOOL_ROUNDS: usize = 25;
 /// Default OpenCode server URL when no override is stored.
 const DEFAULT_OPENCODE_URL: &str = "http://127.0.0.1:6096";
 
-/// Default workspace directory for OpenCode sessions.
-const DEFAULT_OPENCODE_DIR: &str = "/home/gyugo/.winter/workspace";
+/// Resolves the default OpenCode workspace directory at runtime from $HOME (or $USERPROFILE on Windows).
+/// Falls back to "." if neither variable is set — the caller should prompt the user to configure a directory.
+fn default_opencode_dir() -> String {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(|h| format!("{}/.winter/workspace", h))
+        .unwrap_or_else(|_| ".".to_string())
+}
 
 /// Store key for the MBTI personality modifier.
 const STORE_KEY_MBTI_MODIFIER: &str = "mbti_prompt_modifier";
@@ -198,7 +204,7 @@ fn get_opencode_dir(app: &AppHandle) -> String {
         .and_then(|store| store.get("opencode_directory"))
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string())
+        .unwrap_or_else(|| default_opencode_dir())
 }
 
 // ── OAuth Commands ──────────────────────────────────────────────────
@@ -596,7 +602,7 @@ async fn get_working_directory(app: AppHandle) -> Result<String, String> {
         .get("opencode_directory")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| DEFAULT_OPENCODE_DIR.to_string());
+        .unwrap_or_else(|| default_opencode_dir());
     Ok(dir)
 }
 
@@ -618,6 +624,15 @@ async fn set_working_directory(app: AppHandle, directory: String) -> Result<(), 
     store.set("opencode_directory", json!(directory));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Returns the current user's home directory ($HOME on Unix, $USERPROFILE on Windows).
+/// Frontend uses this to initialize path fields before store settings are loaded.
+#[tauri::command]
+fn get_home_dir() -> Result<String, String> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "Cannot determine home directory".to_string())
 }
 
 /// Creates a new directory at an absolute path that does not already exist.
@@ -925,6 +940,7 @@ pub fn run() {
             opencode_get_messages,
             get_working_directory,
             set_working_directory,
+            get_home_dir,
             create_directory,
             search_directories,
             automation::get_infra_status,

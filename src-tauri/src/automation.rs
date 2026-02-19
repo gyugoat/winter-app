@@ -1,6 +1,15 @@
 use serde::{Deserialize, Serialize};
 
-const INFRA_CTL: &str = "/home/gyugo/bin/infra-ctl.sh";
+fn infra_ctl_path() -> Result<String, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "Cannot determine home directory for infra-ctl.sh".to_string())?;
+    let path = format!("{}/bin/infra-ctl.sh", home);
+    if !std::path::Path::new(&path).exists() {
+        return Err(format!("infra-ctl.sh not found at {}", path));
+    }
+    Ok(path)
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ServiceStatus {
@@ -29,7 +38,8 @@ pub struct InfraStatus {
 
 #[tauri::command]
 pub async fn get_infra_status() -> Result<InfraStatus, String> {
-    let output = tokio::process::Command::new(INFRA_CTL)
+    let ctl = infra_ctl_path()?;
+    let output = tokio::process::Command::new(&ctl)
         .arg("status")
         .kill_on_drop(true)
         .output()
@@ -53,7 +63,8 @@ pub async fn toggle_service(service_id: String, action: String) -> Result<(), St
         return Err(format!("Invalid action '{}'. Must be start, stop, or restart", action));
     }
 
-    let output = tokio::process::Command::new(INFRA_CTL)
+    let ctl = infra_ctl_path()?;
+    let output = tokio::process::Command::new(&ctl)
         .arg("service")
         .arg(&service_id)
         .arg(&action)
@@ -78,7 +89,8 @@ pub async fn toggle_service(service_id: String, action: String) -> Result<(), St
 pub async fn toggle_cron(cron_id: String, enabled: bool) -> Result<(), String> {
     let action = if enabled { "enable" } else { "disable" };
 
-    let output = tokio::process::Command::new(INFRA_CTL)
+    let ctl = infra_ctl_path()?;
+    let output = tokio::process::Command::new(&ctl)
         .arg("cron")
         .arg(&cron_id)
         .arg(action)
@@ -101,7 +113,8 @@ pub async fn toggle_cron(cron_id: String, enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn run_cron_now(cron_id: String) -> Result<String, String> {
-    let output = tokio::process::Command::new(INFRA_CTL)
+    let ctl = infra_ctl_path()?;
+    let output = tokio::process::Command::new(&ctl)
         .arg("run")
         .arg(&cron_id)
         .kill_on_drop(true)
@@ -133,7 +146,8 @@ pub async fn run_cron_now(cron_id: String) -> Result<String, String> {
 pub async fn get_cron_log(cron_id: String, lines: Option<u32>) -> Result<String, String> {
     let n = lines.unwrap_or(20);
 
-    let output = tokio::process::Command::new(INFRA_CTL)
+    let ctl = infra_ctl_path()?;
+    let output = tokio::process::Command::new(&ctl)
         .arg("log")
         .arg(&cron_id)
         .arg(n.to_string())

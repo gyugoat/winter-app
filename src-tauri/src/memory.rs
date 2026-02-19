@@ -25,6 +25,9 @@ impl WinterMemoryDB {
     /// Runs `python3 <script_path> recover` and returns the compact output.
     /// This output contains active tasks, recent snapshots, and agent execution history.
     pub async fn recover(&self) -> Result<String, String> {
+        if !std::path::Path::new(&self.script_path).exists() {
+            return Err(format!("winter-db.py not found at {}", self.script_path));
+        }
         let output = tokio::process::Command::new("python3")
             .arg(&self.script_path)
             .arg("recover")
