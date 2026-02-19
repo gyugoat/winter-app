@@ -172,4 +172,13 @@ export const ja: Record<TranslationKey, string> = {
   automationRefresh: '更新',
   automationLoading: '読み込み中...',
   automationError: '読み込み失敗',
+  automationCreateTask: 'タスク作成',
+  automationDeleteTask: '削除',
+  automationTaskName: 'タスク名',
+  automationTaskSchedule: 'cronスケジュール',
+  automationTaskScript: 'スクリプトパス',
+  automationCreate: '作成',
+  automationCancel: 'キャンセル',
+  automationNotInstalled: '未インストール',
+  automationUnsupported: '未サポート',
 };

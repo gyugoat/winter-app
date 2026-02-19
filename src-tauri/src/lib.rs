@@ -2,8 +2,9 @@
 /// This file contains only module declarations, thin Tauri command wrappers,
 /// and the `run()` function. All logic lives in the submodules.
 
-mod automation;
 mod claude;
+mod scheduler;
+mod services;
 mod memory;
 mod modes;
 mod ollama;
@@ -911,6 +912,24 @@ pub fn run() {
         .manage(Mutex::new(None::<PkceState>))
         .manage(Arc::new(AtomicBool::new(false)))
         .manage(tokio::sync::Mutex::new(()))
+        .manage(scheduler::SharedSchedulerState::default())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            let state: tauri::State<scheduler::SharedSchedulerState> = app.state();
+            let state_clone = state.inner().clone();
+            tauri::async_runtime::spawn(async move {
+                match scheduler::init_scheduler(&app_handle).await {
+                    Ok(inner) => {
+                        *state_clone.lock().await = Some(inner);
+                        scheduler::start_enabled_jobs(&state_clone).await;
+                    }
+                    Err(e) => {
+                        eprintln!("[scheduler] Failed to initialize: {}", e);
+                    }
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_authorize_url,
             exchange_code,
@@ -943,11 +962,15 @@ pub fn run() {
             get_home_dir,
             create_directory,
             search_directories,
-            automation::get_infra_status,
-            automation::toggle_service,
-            automation::toggle_cron,
-            automation::run_cron_now,
-            automation::get_cron_log,
+            scheduler::get_scheduler_status,
+            scheduler::toggle_task,
+            scheduler::run_task_now,
+            scheduler::get_task_log,
+            scheduler::create_task,
+            scheduler::delete_task,
+            scheduler::update_task,
+            services::get_services_status,
+            services::control_service,
             winter_db_recover,
             send_opencode_prompt_with_mode,
         ])

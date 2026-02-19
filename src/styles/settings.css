@@ -1346,6 +1346,119 @@
   color: var(--text-primary);
 }
 
+/* Status dot variants */
+.settings-automation-status-dot.notinstalled {
+  background: var(--warning);
+}
+
+.settings-automation-status-dot.unknown {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+/* Delete button */
+.settings-automation-delete-btn {
+  color: var(--error) !important;
+}
+
+.settings-automation-delete-btn:hover:not(:disabled) {
+  background: var(--error-soft-bg) !important;
+  border-color: var(--error-soft-border) !important;
+  color: var(--error) !important;
+}
+
+/* Create task button (inline row) */
+.settings-automation-create-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.settings-automation-create-btn:hover {
+  opacity: 0.75;
+}
+
+/* Inline create form */
+.settings-automation-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+
+.settings-automation-create-input {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.settings-automation-create-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-automation-create-input::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-automation-create-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.settings-automation-create-submit {
+  flex: 1;
+  padding: 7px 12px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.settings-automation-create-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.settings-automation-create-submit:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.settings-automation-create-cancel {
+  padding: 7px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-automation-create-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .settings-card-nav {
   cursor: pointer;
 }

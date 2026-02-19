@@ -33,3 +33,7 @@ urlencoding = "2"
 
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 
+tokio-cron-scheduler = "0.13"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+async-trait = "0.1"

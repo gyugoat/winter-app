@@ -172,4 +172,13 @@ export const zh: Record<TranslationKey, string> = {
   automationRefresh: '刷新',
   automationLoading: '加载中...',
   automationError: '加载失败',
+  automationCreateTask: '创建任务',
+  automationDeleteTask: '删除',
+  automationTaskName: '任务名称',
+  automationTaskSchedule: 'cron计划',
+  automationTaskScript: '脚本路径',
+  automationCreate: '创建',
+  automationCancel: '取消',
+  automationNotInstalled: '未安装',
+  automationUnsupported: '不支持',
 };

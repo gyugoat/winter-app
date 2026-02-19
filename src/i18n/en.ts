@@ -168,6 +168,15 @@ export const en = {
   automationRefresh: 'Refresh',
   automationLoading: 'Loading status...',
   automationError: 'Failed to load status',
+  automationCreateTask: 'Create Task',
+  automationDeleteTask: 'Delete',
+  automationTaskName: 'Task name',
+  automationTaskSchedule: 'Cron schedule',
+  automationTaskScript: 'Script path',
+  automationCreate: 'Create',
+  automationCancel: 'Cancel',
+  automationNotInstalled: 'Not installed',
+  automationUnsupported: 'Unsupported',
 } as const;
 
 export type TranslationKey = keyof typeof en;

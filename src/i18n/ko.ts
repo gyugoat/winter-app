@@ -175,4 +175,13 @@ export const ko: Record<TranslationKey, string> = {
   automationRefresh: '새로고침',
   automationLoading: '상태 불러오는 중...',
   automationError: '상태 로드 실패',
+  automationCreateTask: '작업 생성',
+  automationDeleteTask: '삭제',
+  automationTaskName: '작업 이름',
+  automationTaskSchedule: '크론 스케줄',
+  automationTaskScript: '스크립트 경로',
+  automationCreate: '생성',
+  automationCancel: '취소',
+  automationNotInstalled: '미설치',
+  automationUnsupported: '미지원',
 };

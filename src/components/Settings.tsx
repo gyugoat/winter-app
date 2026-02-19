@@ -904,35 +904,43 @@ function FolderBrowserContent({
   );
 }
 
-interface ServiceStatus {
+interface ServiceStatusInfo {
   id: string;
   name: string;
-  active: boolean;
-  enabled: boolean;
-  category: 'agent' | 'proxy' | 'ai-service';
+  category: string;
+  status: 'running' | 'stopped' | 'unknown' | 'notinstalled' | 'unsupported';
+  supported: boolean;
 }
 
-interface CronStatus {
+interface TaskStatus {
   id: string;
   name: string;
-  enabled: boolean;
   schedule: string;
-  lastLog: string;
+  enabled: boolean;
+  created_by_user: boolean;
+  last_run?: string;
+  next_run?: string;
+  running: boolean;
 }
 
-interface InfraStatus {
-  services: ServiceStatus[];
-  crons: CronStatus[];
+interface CreateTaskForm {
+  name: string;
+  schedule: string;
+  script: string;
 }
 
 function AutomationContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
   const { t } = useI18n();
-  const [status, setStatus] = useState<InfraStatus | null>(null);
+  const [services, setServices] = useState<ServiceStatusInfo[]>([]);
+  const [tasks, setTasks] = useState<TaskStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(true);
   const [cronsOpen, setCronsOpen] = useState(true);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateTaskForm>({ name: '', schedule: '', script: '' });
+  const [creating, setCreating] = useState(false);
   const fetchIdRef = useRef(0);
 
   const fetchStatus = async () => {
@@ -940,8 +948,14 @@ function AutomationContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElem
     setLoading(true);
     setError(false);
     try {
-      const data = await invoke<InfraStatus>('get_infra_status');
-      if (id === fetchIdRef.current) setStatus(data);
+      const [svcData, taskData] = await Promise.all([
+        invoke<ServiceStatusInfo[]>('get_services_status'),
+        invoke<TaskStatus[]>('get_scheduler_status'),
+      ]);
+      if (id === fetchIdRef.current) {
+        setServices(svcData);
+        setTasks(taskData);
+      }
     } catch {
       if (id === fetchIdRef.current) setError(true);
     }
@@ -958,50 +972,107 @@ function AutomationContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElem
     });
   };
 
-  const handleServiceToggle = async (e: React.MouseEvent<HTMLElement>, svc: ServiceStatus) => {
+  const handleServiceToggle = async (e: React.MouseEvent<HTMLElement>, svc: ServiceStatusInfo) => {
     onFlash(e);
     if (busyIds.has(svc.id)) return;
     setBusy(svc.id, true);
     try {
-      await invoke('toggle_service', { serviceId: svc.id, action: svc.active ? 'stop' : 'start' });
+      await invoke('control_service', { id: svc.id, action: svc.status === 'running' ? 'stop' : 'start' });
     } catch { setError(true); }
     try { await fetchStatus(); } catch { /* status refresh failed but action may have succeeded */ }
     setBusy(svc.id, false);
   };
 
-  const handleServiceRestart = async (e: React.MouseEvent<HTMLElement>, svc: ServiceStatus) => {
+  const handleServiceRestart = async (e: React.MouseEvent<HTMLElement>, svc: ServiceStatusInfo) => {
     onFlash(e);
     const key = `${svc.id}-restart`;
     if (busyIds.has(key)) return;
     setBusy(key, true);
     try {
-      await invoke('toggle_service', { serviceId: svc.id, action: 'restart' });
+      await invoke('control_service', { id: svc.id, action: 'restart' });
     } catch { setError(true); }
     try { await fetchStatus(); } catch { /* status refresh failed but action may have succeeded */ }
     setBusy(key, false);
   };
 
-  const handleCronToggle = async (e: React.MouseEvent<HTMLElement>, cron: CronStatus) => {
+  const handleTaskToggle = async (e: React.MouseEvent<HTMLElement>, task: TaskStatus) => {
     onFlash(e);
-    if (busyIds.has(cron.id)) return;
-    setBusy(cron.id, true);
+    if (busyIds.has(task.id)) return;
+    setBusy(task.id, true);
     try {
-      await invoke('toggle_cron', { cronId: cron.id, enabled: !cron.enabled });
+      await invoke('toggle_task', { id: task.id, enabled: !task.enabled });
     } catch { setError(true); }
     try { await fetchStatus(); } catch { /* status refresh failed but action may have succeeded */ }
-    setBusy(cron.id, false);
+    setBusy(task.id, false);
   };
 
-  const handleRunNow = async (e: React.MouseEvent<HTMLElement>, cron: CronStatus) => {
+  const handleRunNow = async (e: React.MouseEvent<HTMLElement>, task: TaskStatus) => {
     onFlash(e);
-    const key = `${cron.id}-run`;
+    const key = `${task.id}-run`;
     if (busyIds.has(key)) return;
     setBusy(key, true);
     try {
-      await invoke('run_cron_now', { cronId: cron.id });
+      await invoke('run_task_now', { id: task.id });
     } catch { setError(true); }
     setBusy(key, false);
   };
+
+  const handleDeleteTask = async (e: React.MouseEvent<HTMLElement>, task: TaskStatus) => {
+    onFlash(e);
+    const key = `${task.id}-delete`;
+    if (busyIds.has(key)) return;
+    setBusy(key, true);
+    try {
+      await invoke('delete_task', { id: task.id });
+      await fetchStatus();
+    } catch { setError(true); }
+    setBusy(key, false);
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createForm.name.trim() || !createForm.schedule.trim() || !createForm.script.trim()) return;
+    setCreating(true);
+    try {
+      const id = createForm.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      if (!id) return;
+      await invoke('create_task', {
+        entry: {
+          id,
+          name: createForm.name.trim(),
+          schedule: createForm.schedule.trim(),
+          command: { script: createForm.script.trim(), args: [] },
+          log_file: `${id}.log`,
+          enabled: false,
+          created_by_user: true,
+        },
+      });
+      setCreateForm({ name: '', schedule: '', script: '' });
+      setShowCreateForm(false);
+      await fetchStatus();
+    } catch { setError(true); }
+    setCreating(false);
+  };
+
+  const getServiceDotClass = (status: ServiceStatusInfo['status']) => {
+    switch (status) {
+      case 'running': return 'settings-automation-status-dot active';
+      case 'stopped': return 'settings-automation-status-dot';
+      case 'notinstalled': return 'settings-automation-status-dot notinstalled';
+      default: return 'settings-automation-status-dot unknown';
+    }
+  };
+
+  const getServiceLabel = (svc: ServiceStatusInfo) => {
+    switch (svc.status) {
+      case 'running': return t('automationRunning');
+      case 'stopped': return t('automationStopped');
+      case 'notinstalled': return t('automationNotInstalled');
+      default: return t('automationStopped');
+    }
+  };
+
+  const visibleServices = services.filter(s => s.supported !== false && s.status !== 'unsupported');
 
   if (loading) {
     return (
@@ -1011,7 +1082,7 @@ function AutomationContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElem
     );
   }
 
-  if (error || !status) {
+  if (error) {
     return (
       <div className="settings-automation-state">
         <span className="settings-automation-state-text settings-automation-state-error">{t('automationError')}</span>
@@ -1024,56 +1095,58 @@ function AutomationContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElem
 
   return (
     <div className="settings-automation">
-      <div className="settings-automation-section">
-        <button
-          className="settings-automation-section-header"
-          onClick={(e) => { onFlash(e); setServicesOpen(!servicesOpen); }}
-        >
-          <span className={`settings-automation-section-chevron${servicesOpen ? ' open' : ''}`}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </span>
-          <span className="settings-automation-section-title">{t('automationServices')}</span>
-          <span className="settings-automation-section-count">{status.services.length}</span>
-        </button>
-        {servicesOpen && (
-          <div className="settings-card settings-automation-list">
-            {status.services.map((svc, i) => (
-              <div key={svc.id} className={`settings-automation-row${i < status.services.length - 1 ? ' settings-automation-row-divider' : ''}`}>
-                <span className={`settings-automation-status-dot${svc.active ? ' active' : ''}`} />
-                <span className="settings-automation-name">{svc.name}</span>
-                <span className={`settings-automation-label${svc.active ? ' running' : ''}`}>
-                  {svc.active ? t('automationRunning') : t('automationStopped')}
-                </span>
-                <div className="settings-automation-actions">
-                  <button
-                    className="settings-automation-action-btn"
-                    onClick={(e) => handleServiceRestart(e, svc)}
-                    disabled={busyIds.has(`${svc.id}-restart`)}
-                    title={t('automationRestart')}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="23 4 23 10 17 10" />
-                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                    </svg>
-                  </button>
-                  <button
-                    className="settings-automation-toggle-wrap"
-                    onClick={(e) => handleServiceToggle(e, svc)}
-                    disabled={busyIds.has(svc.id)}
-                    aria-label={svc.active ? t('automationRunning') : t('automationStopped')}
-                  >
-                    <span className={`settings-automation-toggle${svc.active ? ' on' : ''}`}>
-                      <span className="settings-automation-toggle-dot" />
-                    </span>
-                  </button>
+      {visibleServices.length > 0 && (
+        <div className="settings-automation-section">
+          <button
+            className="settings-automation-section-header"
+            onClick={(e) => { onFlash(e); setServicesOpen(!servicesOpen); }}
+          >
+            <span className={`settings-automation-section-chevron${servicesOpen ? ' open' : ''}`}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </span>
+            <span className="settings-automation-section-title">{t('automationServices')}</span>
+            <span className="settings-automation-section-count">{visibleServices.length}</span>
+          </button>
+          {servicesOpen && (
+            <div className="settings-card settings-automation-list">
+              {visibleServices.map((svc, i) => (
+                <div key={svc.id} className={`settings-automation-row${i < visibleServices.length - 1 ? ' settings-automation-row-divider' : ''}`}>
+                  <span className={getServiceDotClass(svc.status)} />
+                  <span className="settings-automation-name">{svc.name}</span>
+                  <span className={`settings-automation-label${svc.status === 'running' ? ' running' : ''}`}>
+                    {getServiceLabel(svc)}
+                  </span>
+                  <div className="settings-automation-actions">
+                    <button
+                      className="settings-automation-action-btn"
+                      onClick={(e) => handleServiceRestart(e, svc)}
+                      disabled={busyIds.has(`${svc.id}-restart`) || svc.status === 'notinstalled'}
+                      title={t('automationRestart')}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="23 4 23 10 17 10" />
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                      </svg>
+                    </button>
+                    <button
+                      className="settings-automation-toggle-wrap"
+                      onClick={(e) => handleServiceToggle(e, svc)}
+                      disabled={busyIds.has(svc.id) || svc.status === 'notinstalled'}
+                      aria-label={svc.status === 'running' ? t('automationRunning') : t('automationStopped')}
+                    >
+                      <span className={`settings-automation-toggle${svc.status === 'running' ? ' on' : ''}`}>
+                        <span className="settings-automation-toggle-dot" />
+                      </span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="settings-automation-section">
         <button
@@ -1086,19 +1159,34 @@ function AutomationContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElem
             </svg>
           </span>
           <span className="settings-automation-section-title">{t('automationCrons')}</span>
-          <span className="settings-automation-section-count">{status.crons.length}</span>
+          <span className="settings-automation-section-count">{tasks.length}</span>
         </button>
         {cronsOpen && (
           <div className="settings-card settings-automation-list">
-            {status.crons.map((cron, i) => (
-              <div key={cron.id} className={`settings-automation-row${i < status.crons.length - 1 ? ' settings-automation-row-divider' : ''}`}>
-                <span className="settings-automation-name">{cron.name}</span>
-                <span className="settings-automation-schedule">{cron.schedule}</span>
+            {tasks.map((task, i) => (
+              <div key={task.id} className={`settings-automation-row${i < tasks.length - 1 ? ' settings-automation-row-divider' : ''}`}>
+                <span className="settings-automation-name">{task.name}</span>
+                <span className="settings-automation-schedule">{task.schedule}</span>
                 <div className="settings-automation-actions">
+                  {task.created_by_user && (
+                    <button
+                      className="settings-automation-action-btn settings-automation-delete-btn"
+                      onClick={(e) => handleDeleteTask(e, task)}
+                      disabled={busyIds.has(`${task.id}-delete`)}
+                      title={t('automationDeleteTask')}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4h6v2" />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     className="settings-automation-action-btn"
-                    onClick={(e) => handleRunNow(e, cron)}
-                    disabled={busyIds.has(`${cron.id}-run`)}
+                    onClick={(e) => handleRunNow(e, task)}
+                    disabled={busyIds.has(`${task.id}-run`) || task.running}
                     title={t('automationRunNow')}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
@@ -1107,17 +1195,75 @@ function AutomationContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElem
                   </button>
                   <button
                     className="settings-automation-toggle-wrap"
-                    onClick={(e) => handleCronToggle(e, cron)}
-                    disabled={busyIds.has(cron.id)}
-                    aria-label={cron.enabled ? t('automationRunning') : t('automationStopped')}
+                    onClick={(e) => handleTaskToggle(e, task)}
+                    disabled={busyIds.has(task.id)}
+                    aria-label={task.enabled ? t('automationRunning') : t('automationStopped')}
                   >
-                    <span className={`settings-automation-toggle${cron.enabled ? ' on' : ''}`}>
+                    <span className={`settings-automation-toggle${task.enabled ? ' on' : ''}`}>
                       <span className="settings-automation-toggle-dot" />
                     </span>
                   </button>
                 </div>
               </div>
             ))}
+            {showCreateForm ? (
+              <form
+                className="settings-automation-create-form"
+                onSubmit={handleCreateTask}
+              >
+                <input
+                  className="settings-automation-create-input"
+                  type="text"
+                  placeholder={t('automationTaskName')}
+                  value={createForm.name}
+                  onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
+                  autoFocus
+                />
+                <input
+                  className="settings-automation-create-input"
+                  type="text"
+                  placeholder={t('automationTaskSchedule')}
+                  value={createForm.schedule}
+                  onChange={e => setCreateForm(f => ({ ...f, schedule: e.target.value }))}
+                />
+                <input
+                  className="settings-automation-create-input"
+                  type="text"
+                  placeholder={t('automationTaskScript')}
+                  value={createForm.script}
+                  onChange={e => setCreateForm(f => ({ ...f, script: e.target.value }))}
+                />
+                <div className="settings-automation-create-actions">
+                  <button
+                    type="submit"
+                    className="settings-automation-create-submit"
+                    disabled={creating || !createForm.name.trim() || !createForm.schedule.trim() || !createForm.script.trim()}
+                  >
+                    {t('automationCreate')}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-automation-create-cancel"
+                    onClick={() => { setShowCreateForm(false); setCreateForm({ name: '', schedule: '', script: '' }); }}
+                  >
+                    {t('automationCancel')}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className={`settings-automation-row${tasks.length > 0 ? ' settings-automation-row-divider' : ''}`}>
+                <button
+                  className="settings-automation-create-btn"
+                  onClick={(e) => { onFlash(e); setShowCreateForm(true); }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  {t('automationCreateTask')}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
