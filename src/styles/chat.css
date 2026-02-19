@@ -11,23 +11,23 @@
   flex-direction: column;
   flex: 1;
   overflow: hidden;
-  padding-left: 50px;
-  transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.chat-body.sidebar-open {
-  padding-left: 230px;
-}
-
-.chat-body.sidebar-collapsed {
-  padding-left: 50px;
-}
-
-.chat-body.changes-open {
-  padding-right: 280px;
+  padding-left: var(--sidebar-collapsed-width, 50px);
   transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
               padding-right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+.chat-body.sidebar-open {
+  padding-left: var(--sidebar-width, 300px);
+}
+
+.chat-body.sidebar-collapsed {
+  padding-left: var(--sidebar-collapsed-width, 50px);
+}
+
+.chat-body.changes-open {
+  padding-right: var(--fc-panel-width, 280px);
+}
+
 
 /* ── "Winter ❄." brand mark ── */
 
@@ -37,7 +37,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 18px 0 0 24px;
+  padding: 18px 0 0 25px;
   font-size: 18px;
   font-weight: 600;
   font-family: var(--font-sans);
@@ -171,6 +171,22 @@
 .chat-search-close:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+/* ── Session title ── */
+
+.chat-session-title {
+  position: relative;
+  z-index: 1;
+  padding: 16px var(--chat-padding-x, 32px) 0 calc(var(--chat-padding-x, 32px) + 52px);
+  margin: 0 auto 20px;
+  max-width: var(--chat-max-width, 900px);
+  width: 100%;
+  font-size: 1.3em;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
 }
 
 /* ── Tab bar (Chrome-style file tabs) ── */

@@ -33,6 +33,17 @@ export type ChatStreamEvent =
   | { event: 'status'; data: { text: string } }
   | { event: 'usage'; data: { input_tokens: number; output_tokens: number } };
 
+// ── Tool Activity ──
+
+export type ToolStatus = 'running' | 'completed' | 'error';
+
+export interface ToolActivity {
+  id: string;
+  name: string;
+  status: ToolStatus;
+  result?: string;
+}
+
 // ── File Changes ──
 
 export interface FileChange {

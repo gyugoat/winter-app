@@ -1,16 +1,22 @@
+:root {
+  --chat-max-width: 900px;
+  --chat-padding-x: 32px;
+  --user-bubble-max-width: 60%;
+}
+
 .message-list {
   position: relative;
   z-index: 1;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px 24px;
+  padding: 20px var(--chat-padding-x, 32px);
   display: flex;
   flex-direction: column-reverse;
   gap: 16px;
-  max-width: 720px;
-  margin: 0 auto;
+  max-width: var(--chat-max-width, 900px);
   width: 100%;
+  margin: 0 auto;
 }
 
 .message-empty {
@@ -67,7 +73,7 @@
 .message-row {
   display: flex;
   gap: 10px;
-  max-width: 80%;
+  max-width: 100%;
   min-width: 0;
   animation: msgIn 0.3s ease-out;
   overflow: visible;
@@ -85,6 +91,7 @@
 .message-row.user {
   align-self: flex-end;
   flex-direction: row-reverse;
+  max-width: var(--user-bubble-max-width, 60%);
 }
 
 /* Diamond avatar */

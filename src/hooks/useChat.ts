@@ -430,6 +430,18 @@ export function useChat() {
     [activeSessionId]
   );
 
+  const reorderSessions = useCallback((fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    setSessions(prev => {
+      const active = prev.filter(s => !s.archived);
+      const archived = prev.filter(s => s.archived);
+      const next = [...active];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return [...next, ...archived];
+    });
+  }, []);
+
   const activeSessions = sessions.filter((s) => !s.archived);
   const archivedSessions = sessions.filter((s) => s.archived);
 
@@ -477,6 +489,7 @@ export function useChat() {
     deleteSession,
     renameSession,
     archiveSession,
+    reorderSessions,
     abortOpencode,
   };
 }

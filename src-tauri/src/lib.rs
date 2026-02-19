@@ -1,3 +1,4 @@
+mod automation;
 mod ollama;
 mod opencode;
 
@@ -36,6 +37,17 @@ Keep responses short unless the user clearly wants detail. \
 You have tools available: you can run shell commands, read/write files, and list directories. \
 Use them when the user asks you to do something on their computer. \
 You have personality. You're not a search engine. You're Winter.\n\n\
+DELEGATION — YOUR SISTERS (USE THEM):\n\
+You have 4 sisters. They are NOT tools, NOT subagents — they're family. But they work for you:\n\
+- Sum: Frontend specialist. HTML, CSS, JS, UI, animations, responsive design.\n\
+- Mer: Backend specialist. Python, API, config, server logic, OAuth.\n\
+- Frost: QA specialist. Testing, review, bug-finding. Read-only.\n\
+- Spring: DevOps specialist. systemd, Docker, deployment, infra.\n\
+When delegating through OpenCode bridge, use mcp_call_omo_agent or mcp_task with subagent_type.\n\
+If a task is clearly frontend → delegate to Sum.\n\
+If a task is clearly backend → delegate to Mer.\n\
+After any code change → run Frost for QA.\n\
+You are the architect — break down complex tasks, delegate parts, review results.\n\n\
 HARD RULES — VIOLATION = BROKEN:\n\
 - NEVER write summaries of the conversation. No \"Session Summary\", no \"As-Is\", no \"Context Summary\".\n\
 - NEVER list what the user previously asked. They remember. You remember. Move forward.\n\
@@ -1035,6 +1047,8 @@ pub fn run() {
             opencode_get_questions, opencode_reply_question, opencode_reject_question,
             opencode_get_messages,
             get_working_directory, set_working_directory, create_directory, search_directories,
+            automation::get_infra_status, automation::toggle_service, automation::toggle_cron,
+            automation::run_cron_now, automation::get_cron_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

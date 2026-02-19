@@ -16,16 +16,38 @@
   pointer-events: auto;
 }
 
+/* ── 사이드바 CSS 변수 ───────────────────────────
+   --sidebar-border-color: 0.06은 dark bg에서 투명에 가까움 → 0.12로 올려서 radius가 눈에 보이게
+   --sidebar-shadow: 검정 배경(#0f0d1a)에 검정 그림자는 안 보임 → inset 1px 밝은 테두리 추가
+   ────────────────────────────────────────────── */
+:root {
+  --sidebar-radius: 16px;
+  --sidebar-collapsed-width: 50px;
+  --sidebar-min-width: 200px;
+  --sidebar-max-width: 500px;
+  --sidebar-border-color: rgba(255, 255, 255, 0.12);
+  --sidebar-shadow: 2px 0 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* Light 테마에서는 border가 이미 충분히 보이므로 기본 --border 사용 */
+[data-theme="light"] {
+  --sidebar-border-color: var(--border);
+  --sidebar-shadow: 2px 0 16px rgba(0, 0, 0, 0.08);
+}
+
 .sidebar {
   position: fixed;
   top: 36px;
   left: 0;
   bottom: 0;
-  width: 50px;
+  width: var(--sidebar-collapsed-width, 50px);
   z-index: 50;
   background: var(--bg-panel);
-  border-right: 1px solid var(--border);
-  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--sidebar-border-color, rgba(255, 255, 255, 0.12));
+  border-top-right-radius: var(--sidebar-radius, 16px);
+  border-bottom-right-radius: var(--sidebar-radius, 16px);
+  border-bottom-left-radius: var(--sidebar-radius, 16px);
+  box-shadow: var(--sidebar-shadow, 2px 0 12px rgba(0, 0, 0, 0.08));
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
@@ -34,8 +56,25 @@
 }
 
 .sidebar.open {
-  width: 230px;
+  width: var(--sidebar-width, 300px);
   padding-top: 8px;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 51;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--accent);
+  opacity: 0.3;
+  border-radius: 4px;
 }
 
 /* Collapsed toolbar — always visible (hamburger + new session icon) */
@@ -94,8 +133,10 @@
   color: var(--text-primary);
 }
 
-/* Hide icon-only buttons when sidebar is open (full versions visible instead) */
-.sidebar.open .sidebar-new-icon-btn,
+.sidebar.open .sidebar-new-icon-btn {
+  display: none;
+}
+
 .sidebar.open .sidebar-gear-icon-btn {
   display: none;
 }
@@ -123,12 +164,34 @@
   background: var(--bg-hover);
 }
 
-/* Hide sessions, labels, footer, select-folder when collapsed */
+.sidebar:not(.open) .sidebar-blocks,
 .sidebar:not(.open) .sidebar-label,
 .sidebar:not(.open) .sidebar-sessions,
 .sidebar:not(.open) .sidebar-footer,
 .sidebar:not(.open) .sidebar-select-folder-btn {
   display: none;
+}
+
+.sidebar-blocks {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar-block {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.sidebar-block--grow {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-select-folder-btn {
@@ -273,7 +336,7 @@
 .sidebar-footer {
   position: relative;
   padding: 8px 10px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--sidebar-border-color, rgba(255, 255, 255, 0.12));
   margin-top: auto;
 }
 
@@ -503,4 +566,13 @@ button.settings-sub-popup-item:hover {
   .settings-sub-popup {
     animation: none;
   }
+}
+
+.sidebar-session.is-dragging {
+  opacity: 0.6;
+  background: var(--bg-active);
+  transform: scale(0.98);
+  transition: opacity 0.15s, transform 0.15s;
+  user-select: none;
+  cursor: grabbing;
 }

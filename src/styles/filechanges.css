@@ -1,19 +1,105 @@
+/* ── FileChanges(오른쪽 사이드바) CSS 변수 ─────────
+   --fc-border-color: sidebar와 동일 이유 — dark theme에서 --border(0.06)은 안 보임
+   --fc-shadow: docked 상태에서도 그림자 있어야 border-radius가 시각적으로 구분됨
+   ────────────────────────────────────────────── */
+:root {
+  --fc-radius: 16px;
+  --fc-snap-radius: 100px;
+  --fc-detach-threshold: 20px;
+  --fc-snap-duration: 260ms;
+  --fc-border-color: rgba(255, 255, 255, 0.12);
+  --fc-shadow: -2px 0 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="light"] {
+  --fc-border-color: var(--border);
+  --fc-shadow: -2px 0 16px rgba(0, 0, 0, 0.08);
+}
+
 .fc-panel {
   position: fixed;
-  top: 32px;
+  top: 36px;
   right: 0;
   bottom: 0;
   width: 280px;
   background: var(--bg-panel);
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--fc-border-color, rgba(255, 255, 255, 0.12));
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
+  border-top-left-radius: var(--fc-radius, 16px);
+  border-bottom-left-radius: var(--fc-radius, 16px);
+  box-shadow: var(--fc-shadow, -2px 0 20px rgba(0, 0, 0, 0.5));
   display: flex;
   flex-direction: column;
   z-index: 5;
+  overflow: hidden;
+  isolation: isolate;
   animation: fcSlideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: top 0.3s ease, right 0.3s ease, bottom 0.3s ease,
+              border-radius 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* After initial slide-in, suppress animation so detached→docked snap doesn't replay it */
+.fc-panel.fc-panel--no-intro {
+  animation: none;
+}
+
+.fc-panel.fc-panel--detached {
+  top: auto;
+  right: auto;
+  bottom: auto;
+  border-radius: var(--fc-radius, 16px);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  animation: none;
+  transition: none;
+  resize: both;
+  overflow: auto;
+  min-width: 200px;
+  min-height: 200px;
+}
+
+.fc-panel.fc-panel--detached::-webkit-resizer {
+  display: none;
+}
+
+.fc-panel.fc-panel--detached .fc-header {
+  cursor: grabbing;
+}
+
+.fc-panel.fc-panel--detached .fc-resize-handle {
+  display: none;
+}
+
+.fc-panel.fc-panel--snapping {
+  transition: left 0.25s cubic-bezier(0.2, 0, 0, 1),
+              top 0.25s cubic-bezier(0.2, 0, 0, 1),
+              width 0.25s cubic-bezier(0.2, 0, 0, 1),
+              height 0.25s cubic-bezier(0.2, 0, 0, 1),
+              border-radius 0.25s ease,
+              box-shadow 0.25s ease;
+}
+
+.fc-resize-handle {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.fc-resize-handle:hover,
+.fc-resize-handle:active {
+  background: var(--accent);
+  opacity: 0.3;
+  border-radius: 4px;
 }
 
 @keyframes fcSlideIn {
-  from { transform: translateX(280px); opacity: 0; }
+  from { transform: translateX(100%); opacity: 0; }
   to   { transform: translateX(0); opacity: 1; }
 }
 
@@ -22,7 +108,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 12px 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--fc-border-color, rgba(255, 255, 255, 0.12));
   flex-shrink: 0;
 }
 

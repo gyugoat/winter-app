@@ -158,6 +158,16 @@ export const en = {
   questionConfirm: 'Confirm',
   questionCustomPlaceholder: 'Type your own answer...',
   showMore: 'Show more',
+  automationTitle: 'Automation',
+  automationServices: 'Services',
+  automationCrons: 'Scheduled Tasks',
+  automationRunning: 'Running',
+  automationStopped: 'Stopped',
+  automationRestart: 'Restart',
+  automationRunNow: 'Run now',
+  automationRefresh: 'Refresh',
+  automationLoading: 'Loading status...',
+  automationError: 'Failed to load status',
 } as const;
 
 export type TranslationKey = keyof typeof en;

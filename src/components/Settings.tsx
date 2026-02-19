@@ -15,6 +15,7 @@ import '../styles/archive.css';
 interface SettingsPageProps {
   page: SettingsPageId;
   onClose: () => void;
+  onNavigate?: (page: SettingsPageId) => void;
   sessions?: Session[];
   onSwitchSession?: (id: string) => void;
   workingDirectory?: string;
@@ -52,6 +53,7 @@ const PAGE_TITLE_KEYS: Record<SettingsPageId, TranslationKey> = {
   archive: 'archiveTitle',
   ollama: 'ollamaTitle',
   folder: 'folderTitle',
+  automation: 'automationTitle',
 };
 
 function ShortcutsContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
@@ -177,7 +179,7 @@ const CLAUDE_MODELS = [
   { id: 'claude-haiku-4-20250514', label: 'modelHaiku' as const },
 ];
 
-function PersonalizeContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
+function PersonalizeContent({ onFlash, onNavigate }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void; onNavigate?: (page: SettingsPageId) => void }) {
   const { t } = useI18n();
   const [mbtiLetters, setMbtiLetters] = useState<string[]>(['I', 'N', 'T', 'J']);
   const [animatingIdx, setAnimatingIdx] = useState<number | null>(null);
@@ -256,8 +258,15 @@ function PersonalizeContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLEle
         </div>
       </div>
       <MobileLinkCard onFlash={onFlash} />
-      <button className="settings-card" onClick={onFlash}>
-        <span className="settings-card-title settings-card-title-italic">{t('personalizeAutomation')}</span>
+      <button className="settings-card settings-card-nav" onClick={(e) => { onFlash(e); onNavigate?.('automation'); }}>
+        <div className="settings-card-row">
+          <span className="settings-card-title settings-card-title-italic">{t('personalizeAutomation')}</span>
+          <span className="settings-card-nav-chevron">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </span>
+        </div>
         <span className="settings-card-subtitle">{t('personalizeAutomationSubtitle')}</span>
       </button>
       <div className="settings-card">
@@ -886,6 +895,238 @@ function FolderBrowserContent({
   );
 }
 
+interface ServiceStatus {
+  id: string;
+  name: string;
+  active: boolean;
+  enabled: boolean;
+  category: 'agent' | 'proxy' | 'ai-service';
+}
+
+interface CronStatus {
+  id: string;
+  name: string;
+  enabled: boolean;
+  schedule: string;
+  lastLog: string;
+}
+
+interface InfraStatus {
+  services: ServiceStatus[];
+  crons: CronStatus[];
+}
+
+function AutomationContent({ onFlash }: { onFlash: (e: React.MouseEvent<HTMLElement>) => void }) {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<InfraStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(true);
+  const [cronsOpen, setCronsOpen] = useState(true);
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const fetchIdRef = useRef(0);
+
+  const fetchStatus = async () => {
+    const id = ++fetchIdRef.current;
+    setLoading(true);
+    setError(false);
+    try {
+      const data = await invoke<InfraStatus>('get_infra_status');
+      if (id === fetchIdRef.current) setStatus(data);
+    } catch {
+      if (id === fetchIdRef.current) setError(true);
+    }
+    if (id === fetchIdRef.current) setLoading(false);
+  };
+
+  useEffect(() => { fetchStatus(); }, []);
+
+  const setBusy = (id: string, busy: boolean) => {
+    setBusyIds(prev => {
+      const next = new Set(prev);
+      busy ? next.add(id) : next.delete(id);
+      return next;
+    });
+  };
+
+  const handleServiceToggle = async (e: React.MouseEvent<HTMLElement>, svc: ServiceStatus) => {
+    onFlash(e);
+    if (busyIds.has(svc.id)) return;
+    setBusy(svc.id, true);
+    try {
+      await invoke('toggle_service', { serviceId: svc.id, action: svc.active ? 'stop' : 'start' });
+    } catch { setError(true); }
+    try { await fetchStatus(); } catch { /* status refresh failed but action may have succeeded */ }
+    setBusy(svc.id, false);
+  };
+
+  const handleServiceRestart = async (e: React.MouseEvent<HTMLElement>, svc: ServiceStatus) => {
+    onFlash(e);
+    const key = `${svc.id}-restart`;
+    if (busyIds.has(key)) return;
+    setBusy(key, true);
+    try {
+      await invoke('toggle_service', { serviceId: svc.id, action: 'restart' });
+    } catch { setError(true); }
+    try { await fetchStatus(); } catch { /* status refresh failed but action may have succeeded */ }
+    setBusy(key, false);
+  };
+
+  const handleCronToggle = async (e: React.MouseEvent<HTMLElement>, cron: CronStatus) => {
+    onFlash(e);
+    if (busyIds.has(cron.id)) return;
+    setBusy(cron.id, true);
+    try {
+      await invoke('toggle_cron', { cronId: cron.id, enabled: !cron.enabled });
+    } catch { setError(true); }
+    try { await fetchStatus(); } catch { /* status refresh failed but action may have succeeded */ }
+    setBusy(cron.id, false);
+  };
+
+  const handleRunNow = async (e: React.MouseEvent<HTMLElement>, cron: CronStatus) => {
+    onFlash(e);
+    const key = `${cron.id}-run`;
+    if (busyIds.has(key)) return;
+    setBusy(key, true);
+    try {
+      await invoke('run_cron_now', { cronId: cron.id });
+    } catch { setError(true); }
+    setBusy(key, false);
+  };
+
+  if (loading) {
+    return (
+      <div className="settings-automation-state">
+        <span className="settings-automation-state-text settings-automation-state-loading">{t('automationLoading')}</span>
+      </div>
+    );
+  }
+
+  if (error || !status) {
+    return (
+      <div className="settings-automation-state">
+        <span className="settings-automation-state-text settings-automation-state-error">{t('automationError')}</span>
+        <button className="settings-automation-refresh-btn" onClick={(e) => { onFlash(e); fetchStatus(); }}>
+          {t('automationRefresh')}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-automation">
+      <div className="settings-automation-section">
+        <button
+          className="settings-automation-section-header"
+          onClick={(e) => { onFlash(e); setServicesOpen(!servicesOpen); }}
+        >
+          <span className={`settings-automation-section-chevron${servicesOpen ? ' open' : ''}`}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </span>
+          <span className="settings-automation-section-title">{t('automationServices')}</span>
+          <span className="settings-automation-section-count">{status.services.length}</span>
+        </button>
+        {servicesOpen && (
+          <div className="settings-card settings-automation-list">
+            {status.services.map((svc, i) => (
+              <div key={svc.id} className={`settings-automation-row${i < status.services.length - 1 ? ' settings-automation-row-divider' : ''}`}>
+                <span className={`settings-automation-status-dot${svc.active ? ' active' : ''}`} />
+                <span className="settings-automation-name">{svc.name}</span>
+                <span className={`settings-automation-label${svc.active ? ' running' : ''}`}>
+                  {svc.active ? t('automationRunning') : t('automationStopped')}
+                </span>
+                <div className="settings-automation-actions">
+                  <button
+                    className="settings-automation-action-btn"
+                    onClick={(e) => handleServiceRestart(e, svc)}
+                    disabled={busyIds.has(`${svc.id}-restart`)}
+                    title={t('automationRestart')}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10" />
+                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                    </svg>
+                  </button>
+                  <button
+                    className="settings-automation-toggle-wrap"
+                    onClick={(e) => handleServiceToggle(e, svc)}
+                    disabled={busyIds.has(svc.id)}
+                    aria-label={svc.active ? t('automationRunning') : t('automationStopped')}
+                  >
+                    <span className={`settings-automation-toggle${svc.active ? ' on' : ''}`}>
+                      <span className="settings-automation-toggle-dot" />
+                    </span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="settings-automation-section">
+        <button
+          className="settings-automation-section-header"
+          onClick={(e) => { onFlash(e); setCronsOpen(!cronsOpen); }}
+        >
+          <span className={`settings-automation-section-chevron${cronsOpen ? ' open' : ''}`}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </span>
+          <span className="settings-automation-section-title">{t('automationCrons')}</span>
+          <span className="settings-automation-section-count">{status.crons.length}</span>
+        </button>
+        {cronsOpen && (
+          <div className="settings-card settings-automation-list">
+            {status.crons.map((cron, i) => (
+              <div key={cron.id} className={`settings-automation-row${i < status.crons.length - 1 ? ' settings-automation-row-divider' : ''}`}>
+                <span className="settings-automation-name">{cron.name}</span>
+                <span className="settings-automation-schedule">{cron.schedule}</span>
+                <div className="settings-automation-actions">
+                  <button
+                    className="settings-automation-action-btn"
+                    onClick={(e) => handleRunNow(e, cron)}
+                    disabled={busyIds.has(`${cron.id}-run`)}
+                    title={t('automationRunNow')}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  </button>
+                  <button
+                    className="settings-automation-toggle-wrap"
+                    onClick={(e) => handleCronToggle(e, cron)}
+                    disabled={busyIds.has(cron.id)}
+                    aria-label={cron.enabled ? t('automationRunning') : t('automationStopped')}
+                  >
+                    <span className={`settings-automation-toggle${cron.enabled ? ' on' : ''}`}>
+                      <span className="settings-automation-toggle-dot" />
+                    </span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button
+        className="settings-automation-refresh-btn"
+        onClick={(e) => { onFlash(e); fetchStatus(); }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="23 4 23 10 17 10" />
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+        </svg>
+        {t('automationRefresh')}
+      </button>
+    </div>
+  );
+}
+
 function ArchiveContent({
   onFlash,
   sessions,
@@ -996,7 +1237,7 @@ function ArchiveContent({
   );
 }
 
-export function SettingsPage({ page, onClose, sessions, onSwitchSession, workingDirectory, onChangeDirectory }: SettingsPageProps) {
+export function SettingsPage({ page, onClose, onNavigate, sessions, onSwitchSession, workingDirectory, onChangeDirectory }: SettingsPageProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
 
@@ -1005,7 +1246,7 @@ export function SettingsPage({ page, onClose, sessions, onSwitchSession, working
       case 'shortcuts':
         return <ShortcutsContent onFlash={onFlash} />;
       case 'personalize':
-        return <PersonalizeContent onFlash={onFlash} />;
+        return <PersonalizeContent onFlash={onFlash} onNavigate={onNavigate} />;
       case 'language':
         return <LanguageContent onFlash={onFlash} />;
       case 'feedback':
@@ -1031,6 +1272,8 @@ export function SettingsPage({ page, onClose, sessions, onSwitchSession, working
             }}
           />
         );
+      case 'automation':
+        return <AutomationContent onFlash={onFlash} />;
     }
   };
 

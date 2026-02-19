@@ -18,7 +18,7 @@ import type { TranslationKey } from '../i18n';
 import { QuestionDock } from './QuestionDock';
 import '../styles/chat.css';
 
-export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive' | 'ollama' | 'folder';
+export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive' | 'ollama' | 'folder' | 'automation';
 
 interface ChatProps {
   onReauth?: () => void;
@@ -34,6 +34,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
+  const [changesDetached, setChangesDetached] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
   const [diamondGlow, setDiamondGlow] = useState(false);
   const [toast, setToast] = useState<{ text: string; dropping: boolean } | null>(null);
@@ -53,6 +54,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     deleteSession,
     renameSession,
     archiveSession,
+    reorderSessions,
     abortOpencode,
   } = useChat();
 
@@ -197,7 +199,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   return (
     <div className="chat-layout">
       <Titlebar />
-      <div className={`chat-body${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}${changesOpen ? ' changes-open' : ''}`}>
+      <div className={`chat-body${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}${changesOpen && !changesDetached ? ' changes-open' : ''}`}>
         <Sidebar
           open={sidebarOpen}
           onToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -208,6 +210,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           onDeleteSession={(id) => { deleteSession(id); showToast('toastDeleted'); }}
           onArchiveSession={(id) => { archiveSession(id); showToast('toastArchived'); }}
           onRenameSession={renameSession}
+          onReorderSessions={reorderSessions}
           onSelectSettingsPage={(page) => setSettingsPage(page)}
           onReauth={onReauth ?? (() => {})}
           onShowReadme={onShowReadme ?? (() => {})}
@@ -300,6 +303,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           <SettingsPage
             page={settingsPage}
             onClose={() => setSettingsPage(null)}
+            onNavigate={(page) => setSettingsPage(page)}
             sessions={archivedSessions}
             onSwitchSession={(id) => { handleSwitchSession(id); setSettingsPage(null); }}
             workingDirectory={workingDirectory}
@@ -312,6 +316,9 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           />
         ) : (
           <>
+            {activeSession.name && (
+              <div className="chat-session-title">{activeSession.name}</div>
+            )}
             <MessageList messages={activeSession.messages} searchQuery={searchQuery} />
             {pendingQuestion && (
               <QuestionDock
@@ -338,6 +345,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           onToggle={() => setChangesOpen(false)}
           externalDirectory={workingDirectory}
           onViewFile={handleOpenFile}
+          onDetachChange={setChangesDetached}
         />
       </div>
     </div>

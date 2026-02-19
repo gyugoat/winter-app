@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { FileTreeNode } from '../types';
 import { useFileChanges } from '../hooks/useFileChanges';
 import '../styles/filechanges.css';
@@ -9,6 +9,7 @@ interface FileChangesProps {
   onToggle: () => void;
   externalDirectory?: string;
   onViewFile?: (absolutePath: string | null) => void;
+  onDetachChange?: (detached: boolean) => void;
 }
 
 const FolderIcon = () => (
@@ -107,7 +108,7 @@ function TreeNode({
   );
 }
 
-export function FileChanges({ ocSessionId, open, onToggle, externalDirectory, onViewFile }: FileChangesProps) {
+export function FileChanges({ ocSessionId, open, onToggle, externalDirectory, onViewFile, onDetachChange }: FileChangesProps) {
   const {
     changes,
     fileTree,
@@ -121,6 +122,163 @@ export function FileChanges({ ocSessionId, open, onToggle, externalDirectory, on
     loadChildren,
   } = useFileChanges(ocSessionId, externalDirectory, open);
 
+  const [snapRadius, setSnapRadius] = useState(100);
+  const [detachThreshold, setDetachThreshold] = useState(20);
+  const [snapDuration, setSnapDuration] = useState(260);
+
+  useEffect(() => {
+    const style = getComputedStyle(document.documentElement);
+    const sr = parseInt(style.getPropertyValue('--fc-snap-radius'), 10);
+    const dt = parseInt(style.getPropertyValue('--fc-detach-threshold'), 10);
+    const sd = parseInt(style.getPropertyValue('--fc-snap-duration'), 10);
+    if (!isNaN(sr)) setSnapRadius(sr);
+    if (!isNaN(dt)) setDetachThreshold(dt);
+    if (!isNaN(sd)) setSnapDuration(sd);
+  }, []);
+
+  const [panelWidth, setPanelWidth] = useState(280);
+  const [isDetached, setIsDetached] = useState(false);
+  const [isSnapping, setIsSnapping] = useState(false);
+  const [hasSlid, setHasSlid] = useState(false);
+  const [detachedPos, setDetachedPos] = useState({ x: 0, y: 0 });
+  const [detachedSize, setDetachedSize] = useState({ w: 280, h: 500 });
+
+  const resizeRef = useRef<{ startX: number; startW: number } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    offsetX: number;
+    offsetY: number;
+    dragging: boolean;
+    detached: boolean;
+  } | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const detachedPosRef = useRef({ x: 0, y: 0 });
+  const detachedSizeRef = useRef({ w: 280, h: 500 });
+  const panelWidthRef = useRef(280);
+  const snapRadiusRef = useRef(100);
+  const detachThresholdRef = useRef(20);
+  const snapDurationRef = useRef(260);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--fc-panel-width', `${panelWidth}px`);
+    panelWidthRef.current = panelWidth;
+  }, [panelWidth]);
+
+  useEffect(() => { onDetachChange?.(isDetached); }, [isDetached, onDetachChange]);
+  useEffect(() => { detachedPosRef.current = detachedPos; }, [detachedPos]);
+  useEffect(() => { detachedSizeRef.current = detachedSize; }, [detachedSize]);
+  useEffect(() => { snapRadiusRef.current = snapRadius; }, [snapRadius]);
+  useEffect(() => { detachThresholdRef.current = detachThreshold; }, [detachThreshold]);
+  useEffect(() => { snapDurationRef.current = snapDuration; }, [snapDuration]);
+
+  useEffect(() => {
+    const handleMove = (e: PointerEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const newW = Math.max(200, Math.min(600, r.startW + (r.startX - e.clientX)));
+      setPanelWidth(newW);
+    };
+    const handleUp = () => {
+      if (!resizeRef.current) return;
+      resizeRef.current = null;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', handleUp);
+    return () => {
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', handleUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleDragMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+
+      const dx = e.clientX - d.startX;
+      const dy = e.clientY - d.startY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (!d.detached && dist < detachThresholdRef.current) return;
+
+      if (!d.detached) {
+        d.detached = true;
+        const panel = panelRef.current;
+        if (panel) {
+          const rect = panel.getBoundingClientRect();
+          d.offsetX = e.clientX - rect.left;
+          d.offsetY = e.clientY - rect.top;
+          setDetachedSize({ w: rect.width, h: rect.height });
+        }
+        setIsDetached(true);
+        setIsSnapping(false);
+      }
+
+      setDetachedPos({
+        x: e.clientX - d.offsetX,
+        y: e.clientY - d.offsetY,
+      });
+    };
+
+    const handleDragUp = () => {
+      const d = dragRef.current;
+      if (!d) return;
+      dragRef.current = null;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+
+      if (!d.detached) return;
+
+      const pos = detachedPosRef.current;
+      const size = detachedSizeRef.current;
+      const pw = panelWidthRef.current;
+      const rightEdgeDist = window.innerWidth - (pos.x + size.w);
+      if (rightEdgeDist < snapRadiusRef.current) {
+        setIsSnapping(true);
+        setDetachedPos({ x: window.innerWidth - pw, y: 36 });
+        setDetachedSize({ w: pw, h: window.innerHeight - 36 });
+        setTimeout(() => {
+          setIsDetached(false);
+          setIsSnapping(false);
+        }, snapDurationRef.current);
+      }
+    };
+
+    document.addEventListener('pointermove', handleDragMove);
+    document.addEventListener('pointerup', handleDragUp);
+    return () => {
+      document.removeEventListener('pointermove', handleDragMove);
+      document.removeEventListener('pointerup', handleDragUp);
+    };
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    resizeRef.current = { startX: e.clientX, startW: panelWidth };
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  }, [panelWidth]);
+
+  const handleHeaderDragStart = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+
+    e.preventDefault();
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetX: 0,
+      offsetY: 0,
+      dragging: true,
+      detached: false,
+    };
+    document.body.style.userSelect = 'none';
+  }, []);
+
   const handleSelectFile = useCallback((path: string) => {
     const next = selectedFile === path ? null : path;
     setSelectedFile(next);
@@ -133,9 +291,27 @@ export function FileChanges({ ocSessionId, open, onToggle, externalDirectory, on
 
   if (!open) return null;
 
+  const panelClassName = [
+    'fc-panel',
+    isDetached ? 'fc-panel--detached' : '',
+    isSnapping ? 'fc-panel--snapping' : '',
+    hasSlid ? 'fc-panel--no-intro' : '',
+  ].filter(Boolean).join(' ');
+
+  const panelStyle: React.CSSProperties = isDetached
+    ? {
+        width: `${detachedSize.w}px`,
+        height: `${detachedSize.h}px`,
+        left: `${detachedPos.x}px`,
+        top: `${detachedPos.y}px`,
+        position: 'fixed',
+      }
+    : { width: `${panelWidth}px` };
+
   return (
-    <aside className="fc-panel">
-      <div className="fc-header">
+    <aside className={panelClassName} style={panelStyle} ref={panelRef} onAnimationEnd={() => setHasSlid(true)}>
+      {!isDetached && <div className="fc-resize-handle" onPointerDown={handleResizeStart} />}
+      <div className="fc-header" onPointerDown={handleHeaderDragStart} style={{ cursor: 'grab' }}>
         <div className="fc-header-left">
           <span className="fc-count">
             {viewMode === 'changes' ? `${changes.length} Changes` : dirName}
