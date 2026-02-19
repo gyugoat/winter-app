@@ -879,8 +879,8 @@ async fn opencode_get_messages(
 /// Runs `winter-db.py recover` and returns the compact memory output.
 /// Used by the frontend to restore context after session compaction.
 #[tauri::command]
-async fn winter_db_recover() -> Result<String, String> {
-    WinterMemoryDB::new().recover().await
+async fn winter_db_recover(app: AppHandle) -> Result<String, String> {
+    WinterMemoryDB::new_with_app(&app).recover().await
 }
 
 /// Sends an OpenCode prompt with an optional MessageMode prefix applied to the content.

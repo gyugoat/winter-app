@@ -125,16 +125,13 @@ export function useAgents(): UseAgentsReturn {
   }, []);
 
   const switchAgent = useCallback(
-    async (id: string, onReconnect?: () => void) => {
+    (id: string, onReconnect?: () => void) => {
       setCurrentAgentId(id);
-      // 선택 에이전트를 스토어에 저장
-      try {
-        const store = await load(STORE_FILE);
-        await store.set(ACTIVE_AGENT_KEY, id);
-        await store.save();
-      } catch {
-        // 저장 실패는 조용히 무시
-      }
+      // 선택 에이전트를 스토어에 저장 (fire-and-forget — return type stays void)
+      load(STORE_FILE).then((store) => {
+        store.set(ACTIVE_AGENT_KEY, id);
+        store.save();
+      }).catch(() => {});
       onReconnect?.();
     },
     []

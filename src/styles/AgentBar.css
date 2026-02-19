@@ -103,15 +103,17 @@
 }
 
 .agent-status-dot.status-unknown {
-  background: var(--text-muted);
+  /* neutral mid-grey that reads correctly in both light and dark themes */
+  background: var(--text-secondary, #888);
+  opacity: 0.4;
 }
 
 .agent-status-dot.status-online {
-  background: #73daca;
+  background: var(--success, #73daca);
 }
 
 .agent-status-dot.status-offline {
-  background: #f7768e;
+  background: var(--error, #f7768e);
 }
 
 /* pulse animation for online status */
