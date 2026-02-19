@@ -1,3 +1,10 @@
+/**
+ * Readme — scrollable onboarding document shown on first launch.
+ *
+ * The confirm button remains disabled until the user scrolls to the bottom,
+ * ensuring they read the content. On confirm, sets `readme_seen = true` in
+ * the Tauri Store, fades out, then calls onDone.
+ */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { load } from '@tauri-apps/plugin-store';
 import { Titlebar } from './Titlebar';

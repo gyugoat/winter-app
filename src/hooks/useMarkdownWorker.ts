@@ -1,3 +1,16 @@
+/**
+ * useMarkdownWorker — off-thread markdown rendering with a global shared Web Worker.
+ *
+ * All hook instances share a single worker (ref-counted) to avoid spawning
+ * multiple workers. Rendered HTML is cached by message ID in a module-level Map
+ * so re-renders don't retrigger work.
+ *
+ * Rendering is async: `render()` returns null on the first call and the cached
+ * HTML on subsequent calls after the worker responds. Uses `useSyncExternalStore`
+ * to trigger re-renders when the cache updates.
+ *
+ * All output is sanitized with DOMPurify before being cached.
+ */
 import { useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
 import DOMPurify from 'dompurify';
 import type { WorkerRequest, WorkerResponse } from '../workers/markdown.worker';

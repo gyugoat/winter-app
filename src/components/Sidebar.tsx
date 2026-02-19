@@ -1,3 +1,13 @@
+/**
+ * Sidebar — collapsible session history panel on the left.
+ *
+ * Shows active sessions as a scrollable list with drag-to-reorder support.
+ * Collapsed state shows only the icon toolbar (50px wide).
+ * The settings gear opens a floating popup menu with sub-panels for theme,
+ * token usage, shortcuts, language, archive, Ollama, and feedback.
+ *
+ * Width is user-resizable via a drag handle on the right edge.
+ */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { Session } from '../types';

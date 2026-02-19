@@ -1,3 +1,14 @@
+/**
+ * FileChanges — slide-in side panel showing files changed in the current session.
+ *
+ * Two view modes:
+ * - "Changes": files written/edited/deleted by the AI in this session
+ * - "All files": full directory tree of the working directory
+ *
+ * The panel can be detached by dragging the header, becoming a floating window.
+ * It snaps back to the docked position when dragged close to the right edge.
+ * The width is resizable via a drag handle on the left edge of the panel.
+ */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { FileTreeNode } from '../types';
 import { useFileChanges } from '../hooks/useFileChanges';

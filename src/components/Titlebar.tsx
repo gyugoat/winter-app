@@ -1,9 +1,17 @@
+/**
+ * Titlebar — custom native-feeling window chrome.
+ *
+ * Renders the draggable title bar with minimize / maximize / close controls.
+ * Handles window state animations (minimize slide-out, maximize scale)
+ * by toggling CSS classes on the root element before calling the native API.
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { Diamond } from './Diamond';
 import '../styles/titlebar.css';
 
+/** Returns the Tauri window handle, or null when running outside Tauri (e.g. browser dev) */
 function getTauriWindow(): TauriWindow | null {
   try { return getCurrentWindow(); } catch { return null; }
 }

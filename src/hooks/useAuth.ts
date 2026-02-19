@@ -1,6 +1,19 @@
+/**
+ * useAuth — manages OAuth PKCE authentication state.
+ *
+ * On mount, checks whether a valid token already exists via the Rust backend.
+ * Provides helpers to initiate the OAuth flow, exchange the code for a token,
+ * and log out.
+ *
+ * @returns `{ isAuthenticated, loading, getAuthorizeUrl, exchangeCode, logout }`
+ */
 import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
+/**
+ * Hook for managing OAuth authentication state.
+ * Bridges the Tauri Rust auth commands to React state.
+ */
 export function useAuth() {
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);

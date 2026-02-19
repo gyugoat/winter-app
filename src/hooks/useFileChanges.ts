@@ -1,3 +1,14 @@
+/**
+ * useFileChanges — tracks file changes made during an OpenCode session.
+ *
+ * Polls the OpenCode message history every 5 seconds to extract file operations
+ * (write, edit, bash rm) and builds two parallel views:
+ * - `fileTree`: tree of files changed in this session
+ * - `allFilesTree`: full directory listing with change overlays
+ *
+ * The hook also handles lazy-loading of directory children and tracks the
+ * home/worktree paths from the Rust backend for correct relative path resolution.
+ */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { FileChange, FileTreeNode } from '../types';

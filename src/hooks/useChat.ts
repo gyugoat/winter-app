@@ -1,3 +1,18 @@
+/**
+ * useChat — the central state machine for the chat feature.
+ *
+ * Manages:
+ * - Session persistence (load/save via Tauri Store `sessions.json`)
+ * - Message streaming (via Tauri Channel or fallback chat_send invoke)
+ * - OpenCode server connectivity check (every 30 s)
+ * - Token usage tracking (per-session + weekly rolling window)
+ * - Session CRUD: add, switch, delete, rename, archive, reorder
+ *
+ * The "draft" session (`isDraft = true`) is the pre-send state before the
+ * first message creates a real session with a generated name.
+ *
+ * Streaming is throttled to flush state every 80 ms to avoid excessive renders.
+ */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { load, type Store } from '@tauri-apps/plugin-store';

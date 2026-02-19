@@ -1,5 +1,14 @@
+/**
+ * useTheme — manages app-level light/dark/system theme.
+ *
+ * Persists the chosen mode to `localStorage`. Resolves "system" by listening
+ * to the `prefers-color-scheme` media query, updating automatically when
+ * the OS preference changes. Applies the theme by setting the
+ * `data-theme` attribute on `document.documentElement`.
+ */
 import { useState, useEffect, useCallback } from 'react';
 
+/** The three user-selectable theme modes */
 export type ThemeMode = 'system' | 'light' | 'dark';
 
 const STORAGE_KEY = 'winter-theme';

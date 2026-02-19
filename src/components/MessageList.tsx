@@ -1,3 +1,13 @@
+/**
+ * MessageList — virtualized (paginated) list of chat messages.
+ *
+ * Renders messages in reverse order (newest at top — CSS flex-direction: column-reverse).
+ * Markdown is rendered off-thread via useMarkdownWorker and cached by message ID.
+ * Search highlighting is applied as a post-process over the rendered HTML.
+ *
+ * Pagination: shows the 10 most recent messages, with "show more" to load older ones.
+ * TypewriterStatus handles the animated "thinking..." status text during streaming.
+ */
 import { useEffect, useRef, useMemo, useState, useCallback, memo } from 'react';
 import { useI18n } from '../i18n';
 import { useMarkdownWorker } from '../hooks/useMarkdownWorker';

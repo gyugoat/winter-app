@@ -145,3 +145,43 @@
 .input-image-remove:hover {
   background: var(--bg-active);
 }
+
+/* ── Mode selector pill ─────────────────────────────── */
+
+.input-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 6px;
+}
+
+.input-mode-btn {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.input-mode-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.input-mode-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft-bg, rgba(59,130,246,0.1));
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input-mode-btn {
+    transition: none;
+  }
+}

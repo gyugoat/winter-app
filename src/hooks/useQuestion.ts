@@ -1,3 +1,12 @@
+/**
+ * useQuestion — polls the OpenCode backend for pending clarification questions.
+ *
+ * During streaming, polls every 2 s; when idle, every 5 s.
+ * When a question matching the current session ID is found, it surfaces as
+ * `pending` for the QuestionDock component to display.
+ *
+ * Exposes `reply` (submit selected answers) and `reject` (dismiss without answering).
+ */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 

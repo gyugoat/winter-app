@@ -1,3 +1,10 @@
+/**
+ * FileViewer — syntax-highlighted read-only file viewer.
+ *
+ * Invokes the Rust `opencode_file_content` command to load file contents.
+ * Language is auto-detected from the file extension and passed to highlight.js.
+ * Binary files show an error message instead of content.
+ */
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import hljs from 'highlight.js';

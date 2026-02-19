@@ -1,6 +1,16 @@
+/**
+ * useShortcuts — global keyboard shortcut handler + sent message history.
+ *
+ * Handles all Ctrl+key shortcuts at the window level (capture phase):
+ * N = new session, Q = archive, [ / ] = prev/next session, Backspace = delete,
+ * K = attach file, F = search, P = toggle always-on-top, Escape = stop streaming.
+ *
+ * Also maintains a ring buffer of up to 20 sent messages for Ctrl+↑/↓ recall.
+ */
 import { useEffect, useRef, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
+/** Maximum number of sent messages stored in history for Ctrl+↑/↓ recall */
 const MAX_HISTORY = 20;
 
 interface ShortcutActions {

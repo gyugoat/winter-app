@@ -1,3 +1,10 @@
+/**
+ * ToolActivity — collapsible list of tool calls made during AI generation.
+ *
+ * Each tool call is shown as a card with status icon (running/completed/error),
+ * formatted tool name, and optional expandable result panel.
+ * Results longer than 200 chars become expandable; results > 1500 chars are truncated.
+ */
 import { useState, useCallback, memo } from 'react';
 import type { ToolActivity as ToolActivityType } from '../types';
 import '../styles/tools.css';

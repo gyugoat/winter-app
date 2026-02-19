@@ -1,11 +1,23 @@
+/**
+ * IdleScreen — full-screen screensaver shown after prolonged inactivity.
+ *
+ * Renders an interactive snow-accumulation canvas where flakes progressively
+ * reveal an Olaf image by stamping ice-colored particles matching each pixel's
+ * hue. The Olaf silhouette is fully revealed after 10 minutes.
+ *
+ * Any keydown or mousedown event wakes the app and unmounts this screen.
+ * The `onWake` callback must be wired to clear the idle state in the parent.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { Diamond } from './Diamond';
 import olafImgSrc from '../assets/olaf.png';
 
 interface IdleScreenProps {
+  /** Called when the user interacts to dismiss the idle screen */
   onWake: () => void;
 }
 
+/** Renders the full-screen idle screensaver with snow canvas and pulsing diamond */
 export function IdleScreen({ onWake }: IdleScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startTimeRef = useRef<number>(0);

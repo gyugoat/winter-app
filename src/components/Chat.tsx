@@ -1,3 +1,17 @@
+/**
+ * Chat — the main application shell.
+ *
+ * Orchestrates the full chat experience:
+ * - Sidebar (session management)
+ * - MessageList + MessageInput (conversation)
+ * - FileChanges side panel (git diff viewer)
+ * - FileViewer tab bar (file content viewer)
+ * - SettingsPage overlay
+ * - QuestionDock (AI-driven question prompts)
+ * - Search bar
+ * - Toast notifications
+ * - Diamond brand mark with glow animation
+ */
 import { useState, useEffect, useRef, useCallback, useMemo, useTransition, type ChangeEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Titlebar } from './Titlebar';
@@ -13,9 +27,11 @@ import { useClickFlash } from '../hooks/useClickFlash';
 import { useChat } from '../hooks/useChat';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useQuestion } from '../hooks/useQuestion';
+import { useAgents } from '../hooks/useAgents';
 import { useI18n } from '../i18n';
 import type { TranslationKey } from '../i18n';
 import { QuestionDock } from './QuestionDock';
+import { AgentBar } from './AgentBar';
 import '../styles/chat.css';
 
 export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive' | 'ollama' | 'folder' | 'automation';
@@ -32,6 +48,7 @@ const TOAST_DROP_MS = 400;
 export function Chat({ onReauth, onShowReadme }: ChatProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
+  const agentState = useAgents();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesDetached, setChangesDetached] = useState(false);
@@ -199,6 +216,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   return (
     <div className="chat-layout">
       <Titlebar />
+      <AgentBar agents={agentState} />
       <div className={`chat-body${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}${changesOpen && !changesDetached ? ' changes-open' : ''}`}>
         <Sidebar
           open={sidebarOpen}

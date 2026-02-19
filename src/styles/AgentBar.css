@@ -1,0 +1,148 @@
+.agent-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  height: 40px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+
+.agent-bar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Tab button ─────────────────────────────────────── */
+
+.agent-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  height: 100%;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+  border-bottom: 2px solid transparent;
+  flex-shrink: 0;
+}
+
+.agent-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.agent-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.agent-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Avatar ─────────────────────────────────────────── */
+
+.agent-avatar {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--agent-color, var(--accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.agent-tab.active .agent-avatar {
+  opacity: 1;
+}
+
+.agent-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.agent-avatar-initials {
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ── Status dot ─────────────────────────────────────── */
+
+.agent-status-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg-panel);
+  transition: background 0.2s ease;
+}
+
+.agent-status-dot.status-unknown {
+  background: var(--text-muted);
+}
+
+.agent-status-dot.status-online {
+  background: #73daca;
+}
+
+.agent-status-dot.status-offline {
+  background: #f7768e;
+}
+
+/* pulse animation for online status */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.agent-status-dot.status-online {
+  animation: status-pulse 2.4s ease-in-out infinite;
+}
+
+/* ── Agent name ─────────────────────────────────────── */
+
+.agent-name {
+  font-size: 12px;
+  font-weight: 500;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Reduced motion ─────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-status-dot.status-online {
+    animation: none;
+  }
+
+  .agent-tab {
+    transition: none;
+  }
+}

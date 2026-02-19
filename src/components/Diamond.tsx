@@ -1,9 +1,23 @@
+/**
+ * Diamond — the Winter brand mark.
+ *
+ * A rotated square rendered as a div with CSS custom properties for color/glow.
+ * Used in the titlebar, splash screen, idle screen, and settings.
+ */
+
 interface DiamondProps {
+  /** Side length in pixels (the element is square before rotation) */
   size?: number;
+  /** When true, renders a pulsing box-shadow glow */
   glow?: boolean;
+  /** Extra CSS class names to attach (for positioning) */
   className?: string;
 }
 
+/**
+ * Renders the diamond brand mark at the requested size.
+ * Border radius scales proportionally so the shape stays sharp at small sizes.
+ */
 export function Diamond({ size = 22, glow = false, className = '' }: DiamondProps) {
   return (
     <div

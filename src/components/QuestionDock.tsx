@@ -1,3 +1,10 @@
+/**
+ * QuestionDock — floating panel that presents AI-driven multiple-choice questions.
+ *
+ * Appears above the message input when `useQuestion` detects a pending question
+ * from the OpenCode backend. Supports single and multi-select modes, optional
+ * custom text input, and a dismiss button.
+ */
 import { useState, type KeyboardEvent } from 'react';
 import type { QuestionRequest, QuestionInfo } from '../hooks/useQuestion';
 import { useI18n } from '../i18n';

@@ -1,14 +1,28 @@
+/**
+ * Auth — OAuth PKCE authentication flow screen.
+ *
+ * Shown when the app has no valid token. Guides the user through:
+ * 1. Opening the authorization URL in the system browser
+ * 2. Pasting the authorization code back into the app
+ */
 import { useState } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useI18n } from '../i18n';
 import '../styles/auth.css';
 
 interface AuthProps {
+  /** Returns the OAuth authorization URL from the Rust backend */
   getAuthorizeUrl: () => Promise<string>;
+  /** Exchanges the authorization code for an access token */
   onExchangeCode: (code: string) => Promise<void>;
+  /** Skips authentication (for local/dev use) */
   onSkip: () => void;
 }
 
+/**
+ * Renders the full-screen authentication card with two steps:
+ * open auth URL → paste code → submit.
+ */
 export function Auth({ getAuthorizeUrl, onExchangeCode, onSkip }: AuthProps) {
   const { t } = useI18n();
   const [code, setCode] = useState('');

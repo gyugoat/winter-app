@@ -1,3 +1,12 @@
+/**
+ * Settings — multi-page settings overlay rendered inline in the chat body.
+ *
+ * Pages: shortcuts, personalize (model + MBTI + automation link),
+ *        language, feedback, archive, ollama, folder browser, automation.
+ *
+ * Each page is a separate sub-component. `SettingsPage` is the outer shell
+ * that renders the correct sub-component based on the `page` prop.
+ */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';

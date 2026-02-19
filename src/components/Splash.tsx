@@ -1,3 +1,13 @@
+/**
+ * Splash — the first-launch / returning-user welcome screen.
+ *
+ * Displays a full-screen snow particle animation. On click, shows a greeting,
+ * then fades out and calls onDone to advance to the main Chat view.
+ *
+ * Physics: particles fall and accumulate into a height map. A diamond-shaped
+ * "melt zone" prevents snow from piling on the center. On click, settled snow
+ * falls with gravity (double-buffer offscreen canvas trick for O(1) draw).
+ */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useI18n } from '../i18n';
 import type { TranslationKey } from '../i18n/en';
@@ -8,10 +18,13 @@ const RETURN_GREETING_KEYS: TranslationKey[] = [
 ];
 
 interface SplashProps {
+  /** Called after the fade-out animation finishes */
   onDone: () => void;
+  /** If true, shows a random returning-user greeting instead of the first-launch message */
   returning?: boolean;
 }
 
+/** Full-screen splash screen with snow physics and click-to-continue */
 export function Splash({ onDone, returning = false }: SplashProps) {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);

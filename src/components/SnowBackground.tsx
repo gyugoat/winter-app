@@ -1,9 +1,24 @@
+/**
+ * SnowBackground — ambient animated canvas drawn behind the chat area.
+ *
+ * Renders falling snowflakes at ~20fps (throttled for performance).
+ * In idle mode, snow accumulates at the bottom and a snowman is progressively
+ * drawn over 10 minutes (20 stages × 30 seconds each).
+ *
+ * Uses a MutationObserver to pick up theme changes at runtime so snowflake
+ * color matches both light and dark themes via the `--snow-particle` CSS var.
+ */
 import { useEffect, useRef } from 'react';
 
 interface SnowBackgroundProps {
+  /** When true, snow accumulates and the snowman animation runs */
   idle?: boolean;
 }
 
+/**
+ * Renders an absolutely-positioned canvas that fills its nearest
+ * `position: relative` ancestor. Pointer events are disabled.
+ */
 export function SnowBackground({ idle = false }: SnowBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startTimeRef = useRef<number>(0);
