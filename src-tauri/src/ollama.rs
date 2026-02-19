@@ -1,4 +1,5 @@
-use crate::{ChatMessage, MessageContent, ContentBlock, STORE_FILE};
+use crate::claude::types::{ChatMessage, ContentBlock, MessageContent};
+use crate::STORE_FILE;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;

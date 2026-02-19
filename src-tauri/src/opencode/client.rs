@@ -1,83 +1,41 @@
-use crate::ChatStreamEvent;
+/// HTTP client for the OpenCode server API.
+/// Manages sessions, prompt submission, SSE streaming, and file/question proxying.
+
+use crate::claude::types::ChatStreamEvent;
+use crate::opencode::types::{OcSession, SseEnvelope, SseMessagePart};
 use futures::StreamExt;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::ipc::Channel;
 
-// ── Types ──────────────────────────────────────────────────────────
-
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct OcSessionTime {
-    pub created: u64,
-    pub updated: u64,
-}
-
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct OcSession {
-    pub id: String,
-    #[serde(default)]
-    pub slug: Option<String>,
-    #[serde(default)]
-    pub title: Option<String>,
-    #[serde(default)]
-    pub time: Option<OcSessionTime>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct SseMessagePart {
-    pub id: String,
-    #[serde(rename = "sessionID")]
-    pub session_id: String,
-    #[serde(rename = "messageID", default)]
-    pub message_id: Option<String>,
-    #[serde(rename = "type")]
-    pub part_type: String,
-    #[serde(default)]
-    pub text: Option<String>,
-    #[serde(default)]
-    pub tool: Option<String>,
-    #[serde(rename = "callID", default)]
-    pub call_id: Option<String>,
-    #[serde(default)]
-    pub state: Option<Value>,
-}
-
-// ── SSE Payload Types ──────────────────────────────────────────────
-
-#[derive(Debug, Deserialize)]
-struct SsePayload {
-    #[serde(rename = "type")]
-    event_type: String,
-    #[serde(default)]
-    properties: Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct SseEnvelope {
-    payload: SsePayload,
-}
-
-// ── Client ─────────────────────────────────────────────────────────
-
+/// HTTP client for communicating with a running OpenCode server instance.
+/// All requests include a `?directory=<workspace>` parameter to scope operations.
 pub struct OpenCodeClient {
+    /// Base URL of the OpenCode server (e.g. "http://127.0.0.1:6096").
     base_url: String,
+    /// Workspace directory path sent as query param on every request.
     directory: String,
+    /// Underlying reqwest HTTP client with 30s timeout.
     client: Client,
 }
 
 impl OpenCodeClient {
+    /// Creates a new OpenCodeClient targeting the given base URL and workspace directory.
     pub fn new(base_url: String, directory: String) -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .unwrap_or_else(|_| Client::new());
-        Self { base_url, directory, client }
+        Self {
+            base_url,
+            directory,
+            client,
+        }
     }
 
-    /// Build URL with directory query parameter (matches mobile's api() behavior)
+    /// Builds a full URL by appending `?directory=<workspace>` to the given path.
     fn url(&self, path: &str) -> String {
         let sep = if path.contains('?') { '&' } else { '?' };
         format!(
@@ -86,12 +44,16 @@ impl OpenCodeClient {
         )
     }
 
+    /// Checks if the OpenCode server is running and healthy.
+    /// Returns true only if the health endpoint responds with `{"healthy": true}`.
     pub async fn health_check(&self) -> bool {
         let url = self.url("/global/health");
         match self.client.get(&url).send().await {
             Ok(resp) => {
                 if let Ok(body) = resp.json::<Value>().await {
-                    body.get("healthy").and_then(|v| v.as_bool()).unwrap_or(false)
+                    body.get("healthy")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
                 } else {
                     false
                 }
@@ -100,6 +62,7 @@ impl OpenCodeClient {
         }
     }
 
+    /// Creates a new OpenCode session and returns its metadata.
     pub async fn create_session(&self) -> Result<OcSession, String> {
         let url = self.url("/session");
         let resp = self
@@ -114,7 +77,10 @@ impl OpenCodeClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!("Create session failed: HTTP {} — {}", status, body));
+            return Err(format!(
+                "Create session failed: HTTP {} — {}",
+                status, body
+            ));
         }
 
         resp.json::<OcSession>()
@@ -122,7 +88,14 @@ impl OpenCodeClient {
             .map_err(|e| format!("Failed to parse created session: {}", e))
     }
 
-    pub async fn prompt_async(&self, session_id: &str, content: &str, system: Option<&str>) -> Result<(), String> {
+    /// Sends a prompt to the given session asynchronously (fire-and-forget server-side).
+    /// Optionally appends a system modifier. Returns immediately once the server accepts the prompt.
+    pub async fn prompt_async(
+        &self,
+        session_id: &str,
+        content: &str,
+        system: Option<&str>,
+    ) -> Result<(), String> {
         let url = self.url(&format!("/session/{}/prompt_async", session_id));
         let mut body = serde_json::json!({
             "parts": [{"type": "text", "text": content}]
@@ -143,13 +116,21 @@ impl OpenCodeClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body_text = resp.text().await.unwrap_or_default();
-            return Err(format!("Prompt failed: HTTP {} — {}", status, body_text));
+            return Err(format!(
+                "Prompt failed: HTTP {} — {}",
+                status, body_text
+            ));
         }
 
         Ok(())
     }
 
-    pub async fn get_known_message_ids(&self, session_id: &str) -> std::collections::HashSet<String> {
+    /// Fetches all existing message IDs for a session to use as a deduplication baseline.
+    /// Messages with IDs in this set will be skipped in SSE event handling.
+    pub async fn get_known_message_ids(
+        &self,
+        session_id: &str,
+    ) -> std::collections::HashSet<String> {
         let url = self.url(&format!("/session/{}/message", session_id));
         let mut ids = std::collections::HashSet::new();
         if let Ok(resp) = self.client.get(&url).send().await {
@@ -166,6 +147,7 @@ impl OpenCodeClient {
         ids
     }
 
+    /// Sends an abort request to halt the current running prompt in the given session.
     pub async fn abort(&self, session_id: &str) -> Result<(), String> {
         let url = self.url(&format!("/session/{}/abort", session_id));
         let resp = self
@@ -182,77 +164,146 @@ impl OpenCodeClient {
         Ok(())
     }
 
-    // ── Proxy Methods (for Tauri invoke, replacing frontend fetch) ────
-
+    /// Returns path info from the OpenCode server (working directory, etc.).
     pub async fn get_path_info(&self) -> Result<serde_json::Value, String> {
         let url = self.url("/path");
-        let resp = self.client.get(&url).send().await.map_err(|e| format!("Path request failed: {}", e))?;
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Path request failed: {}", e))?;
         if !resp.status().is_success() {
             return Err(format!("Path request failed: HTTP {}", resp.status()));
         }
-        resp.json::<serde_json::Value>().await.map_err(|e| format!("Path parse failed: {}", e))
+        resp.json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("Path parse failed: {}", e))
     }
 
+    /// Lists files at the given path within the OpenCode workspace.
     pub async fn list_files(&self, path: &str) -> Result<serde_json::Value, String> {
         let url = self.url(&format!("/file?path={}", urlencoding::encode(path)));
-        let resp = self.client.get(&url).send().await.map_err(|e| format!("List files failed: {}", e))?;
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("List files failed: {}", e))?;
         if !resp.status().is_success() {
             return Err(format!("List files failed: HTTP {}", resp.status()));
         }
-        resp.json::<serde_json::Value>().await.map_err(|e| format!("List files parse failed: {}", e))
+        resp.json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("List files parse failed: {}", e))
     }
 
-    pub async fn file_content(&self, path: &str, opencode_dir: &str) -> Result<serde_json::Value, String> {
-        let url = self.url(&format!("/file/content?path={}", urlencoding::encode(path)));
-        let resp = self.client.get(&url)
+    /// Returns the content of a file at the given path in the OpenCode workspace.
+    pub async fn file_content(
+        &self,
+        path: &str,
+        opencode_dir: &str,
+    ) -> Result<serde_json::Value, String> {
+        let url = self.url(&format!(
+            "/file/content?path={}",
+            urlencoding::encode(path)
+        ));
+        let resp = self
+            .client
+            .get(&url)
             .header("x-opencode-directory", opencode_dir)
-            .send().await.map_err(|e| format!("File content failed: {}", e))?;
+            .send()
+            .await
+            .map_err(|e| format!("File content failed: {}", e))?;
         if !resp.status().is_success() {
             return Err(format!("File content failed: HTTP {}", resp.status()));
         }
-        resp.json::<serde_json::Value>().await.map_err(|e| format!("File content parse failed: {}", e))
+        resp.json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("File content parse failed: {}", e))
     }
 
+    /// Returns all pending questions awaiting user input in the OpenCode session.
     pub async fn get_questions(&self) -> Result<serde_json::Value, String> {
         let url = self.url("/question");
-        let resp = self.client.get(&url).send().await.map_err(|e| format!("Questions request failed: {}", e))?;
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Questions request failed: {}", e))?;
         if !resp.status().is_success() {
-            return Err(format!("Questions request failed: HTTP {}", resp.status()));
+            return Err(format!(
+                "Questions request failed: HTTP {}",
+                resp.status()
+            ));
         }
-        resp.json::<serde_json::Value>().await.map_err(|e| format!("Questions parse failed: {}", e))
+        resp.json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("Questions parse failed: {}", e))
     }
 
-    pub async fn reply_question(&self, request_id: &str, answers: serde_json::Value) -> Result<(), String> {
+    /// Submits answers to a pending question in the OpenCode session.
+    pub async fn reply_question(
+        &self,
+        request_id: &str,
+        answers: serde_json::Value,
+    ) -> Result<(), String> {
         let url = self.url(&format!("/question/{}/reply", request_id));
-        let resp = self.client.post(&url)
+        let resp = self
+            .client
+            .post(&url)
             .header("content-type", "application/json")
             .json(&serde_json::json!({ "answers": answers }))
-            .send().await.map_err(|e| format!("Reply failed: {}", e))?;
+            .send()
+            .await
+            .map_err(|e| format!("Reply failed: {}", e))?;
         if !resp.status().is_success() {
             return Err(format!("Reply failed: HTTP {}", resp.status()));
         }
         Ok(())
     }
 
+    /// Rejects a pending question in the OpenCode session without providing answers.
     pub async fn reject_question(&self, request_id: &str) -> Result<(), String> {
         let url = self.url(&format!("/question/{}/reject", request_id));
-        let resp = self.client.post(&url).send().await.map_err(|e| format!("Reject failed: {}", e))?;
+        let resp = self
+            .client
+            .post(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Reject failed: {}", e))?;
         if !resp.status().is_success() {
             return Err(format!("Reject failed: HTTP {}", resp.status()));
         }
         Ok(())
     }
 
-    pub async fn get_session_messages(&self, session_id: &str) -> Result<serde_json::Value, String> {
+    /// Returns all messages in the given OpenCode session.
+    pub async fn get_session_messages(
+        &self,
+        session_id: &str,
+    ) -> Result<serde_json::Value, String> {
         let url = self.url(&format!("/session/{}/message", session_id));
-        let resp = self.client.get(&url).send().await.map_err(|e| format!("Messages request failed: {}", e))?;
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Messages request failed: {}", e))?;
         if !resp.status().is_success() {
-            return Err(format!("Messages request failed: HTTP {}", resp.status()));
+            return Err(format!(
+                "Messages request failed: HTTP {}",
+                resp.status()
+            ));
         }
-        resp.json::<serde_json::Value>().await.map_err(|e| format!("Messages parse failed: {}", e))
+        resp.json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("Messages parse failed: {}", e))
     }
 
-    /// Helper: send an idle "continue" ping to keep the session alive.
+    /// Sends an idle "continue" ping to prevent session timeout.
+    /// Used internally when no SSE activity is detected for IDLE_TIMEOUT seconds.
     async fn send_idle_ping(&self, session_id: &str, ping_num: u32, max_pings: u32) {
         eprintln!(
             "[winter-app] idle-ping {}/{} for session {}",
@@ -262,9 +313,7 @@ impl OpenCodeClient {
             .timeout(std::time::Duration::from_secs(10))
             .build()
         {
-            let ping_url = self.url(&format!(
-                "/session/{}/prompt_async", session_id
-            ));
+            let ping_url = self.url(&format!("/session/{}/prompt_async", session_id));
             let body = serde_json::json!({
                 "parts": [{"type": "text", "text": "continue"}]
             });
@@ -277,11 +326,10 @@ impl OpenCodeClient {
         }
     }
 
-    /// Subscribe to the global SSE event stream and emit ChatStreamEvents.
-    /// Filters events to only those matching `session_id`.
-    /// Returns when the assistant message completes (finish == "stop") or abort is signaled.
-    /// Includes idle-ping: if no SSE activity for 60s, sends "continue" (max 3 times).
-    /// Auto-reconnects on stream errors to maintain idle-ping capability.
+    /// Subscribes to the global SSE event stream and emits `ChatStreamEvent`s via the IPC channel.
+    /// Filters events to the given `session_id` only, skipping pre-existing message IDs.
+    /// Includes idle-ping logic: if no activity for 60s, sends "continue" (max 3 times).
+    /// Auto-reconnects on stream errors. Returns when the assistant message finishes or abort fires.
     pub async fn subscribe_sse(
         &self,
         session_id: &str,
@@ -297,7 +345,8 @@ impl OpenCodeClient {
 
         let mut text_lengths: HashMap<String, usize> = HashMap::new();
         let mut tool_started: HashMap<String, bool> = HashMap::new();
-        let mut user_msg_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut user_msg_ids: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
         let mut idle_ping_count: u32 = 0;
         let mut last_session_activity = std::time::Instant::now();
 
@@ -306,7 +355,6 @@ impl OpenCodeClient {
                 return Ok(());
             }
 
-            // Give up if all pings exhausted and another full timeout passed with no response
             if idle_ping_count >= MAX_IDLE_PINGS
                 && last_session_activity.elapsed() >= IDLE_TIMEOUT
             {
@@ -316,11 +364,13 @@ impl OpenCodeClient {
                 return Ok(());
             }
 
-            // SSE needs no timeout — it's a long-lived connection
             let sse_client = match Client::builder().build() {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!("[winter-app] Failed to create SSE client: {}, retrying...", e);
+                    eprintln!(
+                        "[winter-app] Failed to create SSE client: {}, retrying...",
+                        e
+                    );
                     tokio::time::sleep(RECONNECT_DELAY).await;
                     continue 'reconnect;
                 }
@@ -339,7 +389,8 @@ impl OpenCodeClient {
                         && last_session_activity.elapsed() >= IDLE_TIMEOUT
                     {
                         idle_ping_count += 1;
-                        self.send_idle_ping(session_id, idle_ping_count, MAX_IDLE_PINGS).await;
+                        self.send_idle_ping(session_id, idle_ping_count, MAX_IDLE_PINGS)
+                            .await;
                         last_session_activity = std::time::Instant::now();
                     }
                     tokio::time::sleep(RECONNECT_DELAY).await;
@@ -354,14 +405,18 @@ impl OpenCodeClient {
                     && last_session_activity.elapsed() >= IDLE_TIMEOUT
                 {
                     idle_ping_count += 1;
-                    self.send_idle_ping(session_id, idle_ping_count, MAX_IDLE_PINGS).await;
+                    self.send_idle_ping(session_id, idle_ping_count, MAX_IDLE_PINGS)
+                        .await;
                     last_session_activity = std::time::Instant::now();
                 }
                 tokio::time::sleep(RECONNECT_DELAY).await;
                 continue 'reconnect;
             }
 
-            eprintln!("[winter-app] SSE connected for session {}", session_id);
+            eprintln!(
+                "[winter-app] SSE connected for session {}",
+                session_id
+            );
 
             let mut stream = resp.bytes_stream();
             let mut buffer = String::new();
@@ -379,18 +434,17 @@ impl OpenCodeClient {
                 {
                     Ok(Some(chunk)) => chunk,
                     Ok(None) => {
-                        // Stream closed — reconnect
                         eprintln!("[winter-app] SSE stream closed, reconnecting...");
                         tokio::time::sleep(RECONNECT_DELAY).await;
                         continue 'reconnect;
                     }
                     Err(_) => {
-                        // 5s timeout — check idle ping
                         if idle_ping_count < MAX_IDLE_PINGS
                             && last_session_activity.elapsed() >= IDLE_TIMEOUT
                         {
                             idle_ping_count += 1;
-                            self.send_idle_ping(session_id, idle_ping_count, MAX_IDLE_PINGS).await;
+                            self.send_idle_ping(session_id, idle_ping_count, MAX_IDLE_PINGS)
+                                .await;
                             last_session_activity = std::time::Instant::now();
                         }
                         continue;
@@ -400,8 +454,10 @@ impl OpenCodeClient {
                 let chunk = match chunk {
                     Ok(c) => c,
                     Err(e) => {
-                        // Stream error (e.g. "Internal server error") — reconnect
-                        eprintln!("[winter-app] SSE stream error: {}, reconnecting...", e);
+                        eprintln!(
+                            "[winter-app] SSE stream error: {}, reconnecting...",
+                            e
+                        );
                         tokio::time::sleep(RECONNECT_DELAY).await;
                         continue 'reconnect;
                     }
@@ -434,11 +490,17 @@ impl OpenCodeClient {
                         "server.connected" => {}
 
                         "message.part.updated" => {
-                            let part: SseMessagePart =
-                                match serde_json::from_value(envelope.payload.properties.get("part").cloned().unwrap_or(Value::Null)) {
-                                    Ok(p) => p,
-                                    Err(_) => continue,
-                                };
+                            let part: SseMessagePart = match serde_json::from_value(
+                                envelope
+                                    .payload
+                                    .properties
+                                    .get("part")
+                                    .cloned()
+                                    .unwrap_or(Value::Null),
+                            ) {
+                                Ok(p) => p,
+                                Err(_) => continue,
+                            };
 
                             if part.session_id != session_id {
                                 continue;
@@ -448,7 +510,12 @@ impl OpenCodeClient {
                             idle_ping_count = 0;
 
                             match part.message_id {
-                                Some(ref mid) if known_msg_ids.contains(mid) || user_msg_ids.contains(mid) => continue,
+                                Some(ref mid)
+                                    if known_msg_ids.contains(mid)
+                                        || user_msg_ids.contains(mid) =>
+                                {
+                                    continue
+                                }
                                 None => continue,
                                 _ => {}
                             }
@@ -456,20 +523,25 @@ impl OpenCodeClient {
                             match part.part_type.as_str() {
                                 "text" => {
                                     if let Some(full_text) = &part.text {
-                                        let prev_len = text_lengths.get(&part.id).copied().unwrap_or(0);
+                                        let prev_len =
+                                            text_lengths.get(&part.id).copied().unwrap_or(0);
                                         if full_text.len() > prev_len {
                                             let delta = &full_text[prev_len..];
                                             let _ = on_event.send(ChatStreamEvent::Delta {
                                                 text: delta.to_string(),
                                             });
-                                            text_lengths.insert(part.id.clone(), full_text.len());
+                                            text_lengths
+                                                .insert(part.id.clone(), full_text.len());
                                         }
                                     }
                                 }
 
                                 "tool" => {
                                     let call_id = part.call_id.clone().unwrap_or_default();
-                                    let tool_name = part.tool.clone().unwrap_or_else(|| "unknown".to_string());
+                                    let tool_name = part
+                                        .tool
+                                        .clone()
+                                        .unwrap_or_else(|| "unknown".to_string());
 
                                     if let Some(state) = &part.state {
                                         let status = state
@@ -477,44 +549,86 @@ impl OpenCodeClient {
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("");
 
-                                        let input_json = state.get("input").and_then(|v| v.as_str()).unwrap_or("");
-                                        let is_delegation = tool_name == "mcp_task" || tool_name == "mcp_delegate_task";
-                                        let is_summer = is_delegation && (
-                                            input_json.contains("\"sum\"") || input_json.contains("\"mer\"")
-                                            || input_json.contains("\"visual-engineering\"")
-                                        );
+                                        let input_json = state
+                                            .get("input")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("");
+                                        let is_delegation = tool_name == "mcp_task"
+                                            || tool_name == "mcp_delegate_task";
+                                        let is_summer = is_delegation
+                                            && (input_json.contains("\"sum\"")
+                                                || input_json.contains("\"mer\"")
+                                                || input_json
+                                                    .contains("\"visual-engineering\""));
 
                                         match status {
                                             "running" => {
-                                                if let std::collections::hash_map::Entry::Vacant(e) = tool_started.entry(call_id.clone()) {
+                                                if let std::collections::hash_map::Entry::Vacant(
+                                                    e,
+                                                ) = tool_started
+                                                    .entry(call_id.clone())
+                                                {
                                                     if is_summer {
-                                                        let _ = on_event.send(ChatStreamEvent::Status {
-                                                            text: "Delegating to Summer...".to_string(),
-                                                        });
+                                                        let _ = on_event.send(
+                                                            ChatStreamEvent::Status {
+                                                                text: "Delegating to Summer..."
+                                                                    .to_string(),
+                                                            },
+                                                        );
                                                     } else if is_delegation {
-                                                        let agent = if input_json.contains("\"oracle\"") { "Oracle" }
-                                                            else if input_json.contains("\"explore\"") { "exploring" }
-                                                            else if input_json.contains("\"librarian\"") { "researching" }
-                                                            else if input_json.contains("\"frost\"") { "Frost" }
-                                                            else if input_json.contains("\"spring\"") { "Spring" }
-                                                            else { "subagent" };
-                                                        let _ = on_event.send(ChatStreamEvent::Status {
-                                                            text: format!("Delegating to {}...", agent),
-                                                        });
+                                                        let agent = if input_json
+                                                            .contains("\"oracle\"")
+                                                        {
+                                                            "Oracle"
+                                                        } else if input_json
+                                                            .contains("\"explore\"")
+                                                        {
+                                                            "exploring"
+                                                        } else if input_json
+                                                            .contains("\"librarian\"")
+                                                        {
+                                                            "researching"
+                                                        } else if input_json
+                                                            .contains("\"frost\"")
+                                                        {
+                                                            "Frost"
+                                                        } else if input_json
+                                                            .contains("\"spring\"")
+                                                        {
+                                                            "Spring"
+                                                        } else {
+                                                            "subagent"
+                                                        };
+                                                        let _ = on_event.send(
+                                                            ChatStreamEvent::Status {
+                                                                text: format!(
+                                                                    "Delegating to {}...",
+                                                                    agent
+                                                                ),
+                                                            },
+                                                        );
                                                     }
-                                                    let _ = on_event.send(ChatStreamEvent::ToolStart {
-                                                        name: tool_name,
-                                                        id: call_id,
-                                                    });
+                                                    let _ = on_event.send(
+                                                        ChatStreamEvent::ToolStart {
+                                                            name: tool_name,
+                                                            id: call_id,
+                                                        },
+                                                    );
                                                     e.insert(true);
                                                 }
                                             }
                                             "completed" => {
-                                                if let std::collections::hash_map::Entry::Vacant(e) = tool_started.entry(call_id.clone()) {
-                                                    let _ = on_event.send(ChatStreamEvent::ToolStart {
-                                                        name: tool_name,
-                                                        id: call_id.clone(),
-                                                    });
+                                                if let std::collections::hash_map::Entry::Vacant(
+                                                    e,
+                                                ) = tool_started
+                                                    .entry(call_id.clone())
+                                                {
+                                                    let _ = on_event.send(
+                                                        ChatStreamEvent::ToolStart {
+                                                            name: tool_name,
+                                                            id: call_id.clone(),
+                                                        },
+                                                    );
                                                     e.insert(true);
                                                 }
 
@@ -523,15 +637,19 @@ impl OpenCodeClient {
                                                     .and_then(|m| m.get("output"))
                                                     .and_then(|v| v.as_str())
                                                     .or_else(|| {
-                                                        state.get("output").and_then(|v| v.as_str())
+                                                        state
+                                                            .get("output")
+                                                            .and_then(|v| v.as_str())
                                                     })
                                                     .unwrap_or("")
                                                     .to_string();
 
-                                                let _ = on_event.send(ChatStreamEvent::ToolEnd {
-                                                    id: call_id,
-                                                    result: output,
-                                                });
+                                                let _ = on_event.send(
+                                                    ChatStreamEvent::ToolEnd {
+                                                        id: call_id,
+                                                        result: output,
+                                                    },
+                                                );
                                             }
                                             "error" => {
                                                 let error_msg = state
@@ -540,10 +658,15 @@ impl OpenCodeClient {
                                                     .unwrap_or("Tool execution failed")
                                                     .to_string();
 
-                                                let _ = on_event.send(ChatStreamEvent::ToolEnd {
-                                                    id: call_id,
-                                                    result: format!("[error] {}", error_msg),
-                                                });
+                                                let _ = on_event.send(
+                                                    ChatStreamEvent::ToolEnd {
+                                                        id: call_id,
+                                                        result: format!(
+                                                            "[error] {}",
+                                                            error_msg
+                                                        ),
+                                                    },
+                                                );
                                             }
                                             _ => {}
                                         }
@@ -576,11 +699,17 @@ impl OpenCodeClient {
                                     last_session_activity = std::time::Instant::now();
                                     idle_ping_count = 0;
 
-                                    let role = info.get("role").and_then(|v| v.as_str()).unwrap_or("");
-                                    let finish = info.get("finish").and_then(|v| v.as_str()).unwrap_or("");
+                                    let role =
+                                        info.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                                    let finish = info
+                                        .get("finish")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
 
                                     if role == "user" {
-                                        if let Some(mid) = info.get("id").and_then(|v| v.as_str()) {
+                                        if let Some(mid) =
+                                            info.get("id").and_then(|v| v.as_str())
+                                        {
                                             user_msg_ids.insert(mid.to_string());
                                         }
                                     }
@@ -603,7 +732,10 @@ impl OpenCodeClient {
                                     }
 
                                     if role == "assistant" && finish == "stop" {
-                                        let mid = info.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                                        let mid = info
+                                            .get("id")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("");
                                         if !known_msg_ids.contains(mid) {
                                             let _ = on_event.send(ChatStreamEvent::StreamEnd);
                                             return Ok(());
