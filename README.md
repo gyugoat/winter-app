@@ -31,6 +31,8 @@ Most AI apps run in a browser sandbox. I don't. I'm a native desktop app with fu
 - **Run anything** — Shell commands, build scripts, git workflows. Your terminal, my hands.
 - **Read & write files** — Navigate your filesystem, create projects, edit code. Natively, not through some upload widget.
 - **Think in loops** — I call tools autonomously, up to 25 rounds per task. You say "build a website," I scaffold, code, and serve it.
+- **Switch agents** — Multiple AI agents on different ports, each with their own specialization. Switch with one click in the agent bar.
+- **Search & Analyze modes** — Toggle search mode for exhaustive web lookups, or analyze mode for deep multi-agent investigation. Prefix injection, zero config.
 - **Save your tokens** — Ollama runs locally to compress conversation history. Your wallet will thank me.
 - **Automate your life** — Built-in cron scheduler + cross-platform service manager. Set it and forget it.
 - **Switch brains** — Opus when you need the best. Sonnet for speed. Haiku when you're just chatting.
@@ -81,24 +83,31 @@ First launch: authorize with your Claude account. One OAuth flow, done. Then jus
 ┌─────────────────────────────────────────────────┐
 │  React 19 + TypeScript          (Vite 7)        │
 │  ┌──────────┬──────────┬──────────┬───────────┐ │
-│  │ Chat     │ Sidebar  │ Settings │ FileView  │ │
-│  │ Messages │ Sessions │ Agents   │ Changes   │ │
+│  │ AgentBar │ Chat     │ Sidebar  │ FileView  │ │
+│  │ Tabs     │ Messages │ Sessions │ Changes   │ │
+│  ├──────────┼──────────┼──────────┼───────────┤ │
+│  │ Settings │ Question │ Search   │ Modes     │ │
+│  │ 10 pages │ Dock     │ Bar      │ Selector  │ │
 │  └──────────┴──────────┴──────────┴───────────┘ │
 ├─────────────────────────────────────────────────┤
 │  Tauri 2 (Rust)                                 │
 │  ┌──────────┬──────────┬──────────┬───────────┐ │
-│  │ Claude   │ Ollama   │ Scheduler│ Services  │ │
-│  │ API +    │ History  │ Cron     │ systemd / │ │
-│  │ Tools    │ Compress │ Tasks    │ launchd   │ │
+│  │ Claude   │ OpenCode │ Ollama   │ Memory    │ │
+│  │ API +    │ Multi-   │ History  │ SQLite    │ │
+│  │ Tools    │ Agent    │ Compress │ Recovery  │ │
+│  ├──────────┼──────────┼──────────┼───────────┤ │
+│  │ Modes    │Scheduler │ Services │ Compac-   │ │
+│  │ Search/  │ Cron     │ systemd/ │ tion      │ │
+│  │ Analyze  │ Tasks    │ launchd  │           │ │
 │  └──────────┴──────────┴──────────┴───────────┘ │
 ├─────────────────────────────────────────────────┤
 │  OS: Windows · macOS · Linux                    │
 └─────────────────────────────────────────────────┘
 ```
 
-**Frontend** — React components with CSS modules. Logic lives in hooks, components just render. Markdown parsed off-thread in a Web Worker so the UI never stutters while I'm talking.
+**Frontend** — 17 components + 25 icon components + 10 settings pages. Logic lives in 13 hooks, components just render. Settings was split from a 1600-line monolith into modular pages. Markdown parsed off-thread in a Web Worker so the UI never stutters while I'm talking.
 
-**Backend** — Rust via Tauri 2. Direct HTTPS streaming to Claude's API. Tool calls execute with a 120s timeout and 512KB output cap — enough to run your build scripts, not enough to hang forever. OAuth PKCE keeps your credentials safe. Settings persist locally via `@tauri-apps/plugin-store`.
+**Backend** — Rust via Tauri 2, modularized into `claude/` (API client, streaming, tools), `opencode/` (multi-agent proxy), `memory.rs` (SQLite context recovery), `modes.rs` (search/analyze prefix injection), `scheduler.rs` (cron), `services.rs` (cross-platform service manager), and `compaction.rs`. OAuth PKCE keeps your credentials safe. Settings persist locally via `@tauri-apps/plugin-store`.
 
 ## Development
 
@@ -116,8 +125,24 @@ npm run tauri dev
 
 ```
 src/                        # React frontend
-├── components/             # UI (Chat, Sidebar, Settings, MessageList, ...)
-├── hooks/                  # Logic (useChat, useAuth, useFileChanges, ...)
+├── components/             # 17 UI components
+│   ├── Chat.tsx            # Main shell — orchestrates everything
+│   ├── AgentBar.tsx        # Multi-agent tab bar with health dots
+│   ├── MessageList.tsx     # Virtualized message rendering
+│   ├── MessageInput.tsx    # Input with mode selector (Normal/Search/Analyze)
+│   ├── Sidebar.tsx         # Session list, drag-reorder, archive
+│   ├── FileChanges.tsx     # Git diff viewer (detachable panel)
+│   ├── FileViewer.tsx      # Source file viewer with syntax highlight
+│   ├── QuestionDock.tsx    # AI-driven question prompts
+│   ├── settings/           # 10 modular settings pages
+│   └── icons/              # 25 extracted icon components
+├── hooks/                  # 13 logic hooks
+│   ├── useChat.ts          # Facade: useSessionStore + useStreaming + useOpenCode
+│   ├── useAgents.ts        # Multi-agent state, health checks, port switching
+│   ├── useOpenCode.ts      # OpenCode SSE connection + session bridge
+│   ├── useStreaming.ts     # AI response streaming with throttled flushes
+│   ├── useSessionStore.ts  # Session CRUD + persistence
+│   └── useShortcuts.ts     # Keyboard shortcuts (30+ bindings)
 ├── styles/                 # One CSS file per component
 ├── workers/                # Web Workers (markdown rendering)
 ├── i18n/                   # 4 languages (en, ko, ja, zh)
@@ -125,13 +150,15 @@ src/                        # React frontend
 
 src-tauri/                  # Rust backend
 ├── src/
-│   ├── lib.rs              # Tauri commands + OAuth
-│   ├── claude/             # Claude API client, tools, streaming
-│   ├── ollama.rs           # Local LLM + context compression
-│   ├── scheduler.rs        # Cron task scheduler
-│   ├── services.rs         # Cross-platform service manager
-│   ├── memory.rs           # SQLite memory DB
-│   └── modes.rs            # Search / Analyze mode prefixes
+│   ├── lib.rs              # Tauri setup + command registration only
+│   ├── claude/             # Claude API — client.rs, types.rs, tools.rs
+│   ├── opencode/           # OpenCode proxy — client.rs, types.rs
+│   ├── memory.rs           # WinterMemoryDB (calls winter-db.py for context recovery)
+│   ├── modes.rs            # MessageMode enum — Search/Analyze prefix injection
+│   ├── compaction.rs       # Conversation compaction via Ollama
+│   ├── ollama.rs           # Local LLM client + history compression
+│   ├── scheduler.rs        # Cron task scheduler (tokio-cron)
+│   └── services.rs         # Cross-platform service manager (systemd/launchd/sc.exe)
 └── tauri.conf.json         # Window, CSP, bundle config
 ```
 
