@@ -1,7 +1,6 @@
 /// HTTP client for the Anthropic Claude Messages API.
 /// Handles authentication, model selection, system prompt construction,
 /// streaming response parsing, and multi-round tool-use loops.
-
 use crate::claude::tools::{execute_tool, tool_definitions};
 use crate::claude::types::{ChatMessage, ChatStreamEvent, ContentBlock, StreamedResponse};
 use futures::StreamExt;

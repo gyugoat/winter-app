@@ -1,6 +1,5 @@
 /// HTTP client for the OpenCode server API.
 /// Manages sessions, prompt submission, SSE streaming, and file/question proxying.
-
 use crate::claude::types::ChatStreamEvent;
 use crate::opencode::types::{OcSession, SseEnvelope, SseMessagePart};
 use futures::StreamExt;
@@ -809,7 +808,7 @@ impl OpenCodeClient {
 
                                     if role == "assistant" {
                                         let has_error =
-                                            info.get("error").map_or(false, |e| !e.is_null());
+                                            info.get("error").is_some_and(|e| !e.is_null());
                                         if has_error {
                                             let mid = info
                                                 .get("id")

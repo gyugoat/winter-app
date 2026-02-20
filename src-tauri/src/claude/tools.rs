@@ -1,6 +1,5 @@
 /// Tool definitions and execution logic for Claude's function-calling interface.
 /// Provides shell execution, file I/O, and directory listing capabilities.
-
 use serde_json::{json, Value};
 use std::time::Duration;
 

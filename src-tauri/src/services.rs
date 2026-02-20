@@ -1,7 +1,6 @@
 /// Cross-platform service manager.
 /// Registry stored alongside scheduler-registry.json in Tauri app data dir.
 /// Platform dispatch: Linux→systemctl --user, macOS→launchctl, Windows→sc.exe, mobile→noop.
-
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};

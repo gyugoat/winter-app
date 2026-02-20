@@ -1,6 +1,5 @@
 /// Message mode prefixes injected before user messages.
 /// Mirrors oh-my-opencode plugin behavior for enhanced agent workflows.
-
 use serde::{Deserialize, Serialize};
 
 /// Available message modes for controlling agent behavior.

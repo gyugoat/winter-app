@@ -1,6 +1,5 @@
 /// Types for the OpenCode session API and SSE event stream.
 /// These map directly to the JSON structures returned by the OpenCode server.
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

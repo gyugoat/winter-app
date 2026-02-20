@@ -211,7 +211,7 @@ fn get_opencode_dir(app: &AppHandle) -> String {
         .and_then(|store| store.get("opencode_directory"))
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| default_opencode_dir())
+        .unwrap_or_else(default_opencode_dir)
 }
 
 // ── OAuth Commands ──────────────────────────────────────────────────
@@ -624,7 +624,7 @@ async fn get_working_directory(app: AppHandle) -> Result<String, String> {
         .get("opencode_directory")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| default_opencode_dir());
+        .unwrap_or_else(default_opencode_dir);
     Ok(dir)
 }
 

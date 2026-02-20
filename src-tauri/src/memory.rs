@@ -1,7 +1,6 @@
 /// Interface to Winter's SQLite memory database (winter-db.py).
 /// Provides context recovery for session continuity by running the Python script
 /// and returning its compact output to the frontend.
-
 use tauri::Manager;
 
 /// Fallback path to the winter-db.py script relative to $HOME.

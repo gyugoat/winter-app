@@ -1,7 +1,6 @@
 /// Conversation history compaction module.
 /// Primary provider: Claude Haiku (API) — fast, preserves context.
 /// Fallback provider: Ollama (local) — used when explicitly configured.
-
 use crate::claude::types::{ChatMessage, ContentBlock, MessageContent};
 use crate::STORE_FILE;
 use reqwest::Client;
@@ -79,7 +78,7 @@ pub fn get_settings(app: &AppHandle) -> CompactionSettings {
     // provider key takes precedence. If not set, derive from legacy ollama_enabled.
     let provider = store
         .get("compaction_provider")
-        .and_then(|v| v.as_str().map(|s| CompactionProvider::from_str(s)))
+        .and_then(|v| v.as_str().map(CompactionProvider::from_str))
         .unwrap_or_else(|| {
             // Migrate: if ollama_enabled was true, keep Ollama; otherwise default to Haiku
             let ollama_on = store

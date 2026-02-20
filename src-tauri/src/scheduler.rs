@@ -1,11 +1,10 @@
 /// Tauri-native cron scheduler with persistent registry.
 /// Registry stored at: <app_data_dir>/scheduler-registry.json
 /// Logs stored at:     <app_data_dir>/logs/<task-id>.log
-
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
@@ -325,7 +324,7 @@ fn read_active_cron_ids() -> Vec<String> {
 
 // ── Logging ───────────────────────────────────────────────────────────
 
-fn log_path(data_dir: &PathBuf, task_id: &str) -> PathBuf {
+fn log_path(data_dir: &Path, task_id: &str) -> PathBuf {
     data_dir.join("logs").join(format!("{}.log", task_id))
 }
 
@@ -384,7 +383,7 @@ pub async fn init_scheduler(app: &AppHandle) -> Result<SchedulerState, String> {
 async fn add_job_to_scheduler(
     sched: &JobScheduler,
     task: &TaskEntry,
-    data_dir: &PathBuf,
+    data_dir: &Path,
     shared_state: Option<&SharedSchedulerState>,
 ) -> Result<Uuid, String> {
     let task_id = task.id.clone();

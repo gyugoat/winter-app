@@ -1,6 +1,5 @@
 /// Core message and streaming types for the Claude API.
 /// All types here are serialized/deserialized as part of the Anthropic Messages API contract.
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
