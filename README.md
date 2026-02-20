@@ -39,7 +39,7 @@ Most AI apps run in a browser sandbox. I don't. I'm a native desktop app with fu
 - **Automate your life** — Built-in cron scheduler + cross-platform service manager. Set it and forget it.
 - **Switch brains** — Opus when you need the best. Sonnet for speed. Haiku when you're just chatting.
 - **Adapt to you** — Pick an MBTI type in settings and I'll match my communication style to yours.
-- **Speak your language** — English, Korean, Japanese, Chinese. 한국어도 돼요.
+- **Speak your language** — English, 한국어, 日本語, 中文.
 - **Work from your phone** — Tailscale + QR code. Scan and chat from anywhere.
 
 ## Screenshots
