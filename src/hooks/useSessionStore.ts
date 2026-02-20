@@ -135,6 +135,8 @@ export function useSessionStore(
     const parts = Object.values(ocMsg.parts || {});
     const textParts = parts.filter((p) => p.type === 'text');
     const content = textParts.map((p) => p.text || '').join('');
+    // Skip tool-only assistant messages with no text content
+    if (role === 'assistant' && !content.trim()) return null;
     return {
       id: info.id,
       role,

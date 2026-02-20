@@ -577,14 +577,13 @@ impl OpenCodeClient {
                             last_session_activity = std::time::Instant::now();
                             idle_ping_count = 0;
 
-                            match part.message_id {
-                                Some(ref mid)
-                                    if known_msg_ids.contains(mid)
-                                        || user_msg_ids.contains(mid) =>
+                            match &part.message_id {
+                                Some(mid)
+                                    if known_msg_ids.contains(mid.as_str())
+                                        || user_msg_ids.contains(mid.as_str()) =>
                                 {
                                     continue
                                 }
-                                None => continue,
                                 _ => {}
                             }
 
@@ -747,7 +746,20 @@ impl OpenCodeClient {
                                     });
                                 }
 
-                                "reasoning" => {}
+                                "reasoning" => {
+                                    if let Some(full_text) = &part.text {
+                                        let prev_len =
+                                            text_lengths.get(&part.id).copied().unwrap_or(0);
+                                        if full_text.len() > prev_len {
+                                            let delta = &full_text[prev_len..];
+                                            let _ = on_event.send(ChatStreamEvent::Reasoning {
+                                                text: delta.to_string(),
+                                            });
+                                            text_lengths
+                                                .insert(part.id.clone(), full_text.len());
+                                        }
+                                    }
+                                }
 
                                 _ => {}
                             }
@@ -769,10 +781,6 @@ impl OpenCodeClient {
 
                                     let role =
                                         info.get("role").and_then(|v| v.as_str()).unwrap_or("");
-                                    let finish = info
-                                        .get("finish")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
 
                                     if role == "user" {
                                         if let Some(mid) =
@@ -799,16 +807,42 @@ impl OpenCodeClient {
                                         }
                                     }
 
-                                    if role == "assistant" && finish == "stop" {
-                                        let mid = info
-                                            .get("id")
-                                            .and_then(|v| v.as_str())
-                                            .unwrap_or("");
-                                        if !known_msg_ids.contains(mid) {
-                                            let _ = on_event.send(ChatStreamEvent::StreamEnd);
-                                            return Ok(());
+                                    if role == "assistant" {
+                                        let has_error =
+                                            info.get("error").map_or(false, |e| !e.is_null());
+                                        if has_error {
+                                            let mid = info
+                                                .get("id")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("");
+                                            if !known_msg_ids.contains(mid) {
+                                                let error_msg = info
+                                                    .get("error")
+                                                    .and_then(|e| e.get("name"))
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("Unknown error");
+                                                eprintln!(
+                                                    "[winter-app] message.updated error={} session={}",
+                                                    error_msg, msg_session
+                                                );
+                                                let _ = on_event.send(ChatStreamEvent::StreamEnd);
+                                                return Ok(());
+                                            }
                                         }
                                     }
+                                }
+                            }
+                        }
+
+                        "session.idle" => {
+                            if let Some(props) = envelope.payload.properties.as_object() {
+                                let idle_session = props.get("sessionID")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                if idle_session == session_id {
+                                    eprintln!("[winter-app] session.idle session={}", session_id);
+                                    let _ = on_event.send(ChatStreamEvent::StreamEnd);
+                                    return Ok(());
                                 }
                             }
                         }

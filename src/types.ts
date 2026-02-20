@@ -27,8 +27,10 @@ export interface Message {
   statusText?: string;
   /** Images attached to this message (user uploads) */
   images?: ImageAttachment[];
-  /** Tool calls made during generation — shown in collapsible "Inner voice" */
+  /** Tool calls made during generation */
   toolActivities?: ToolActivity[];
+  /** AI reasoning/thinking text — shown in collapsible "Inner voice" */
+  reasoning?: string;
 }
 
 /** A chat session containing an ordered list of messages */
@@ -60,7 +62,8 @@ export type ChatStreamEvent =
   | { event: 'error'; data: { message: string } }
   | { event: 'ollama_status'; data: { status: string } }
   | { event: 'status'; data: { text: string } }
-  | { event: 'usage'; data: { input_tokens: number; output_tokens: number } };
+  | { event: 'usage'; data: { input_tokens: number; output_tokens: number } }
+  | { event: 'reasoning'; data: { text: string } };
 
 // ── Tool Activity ──
 

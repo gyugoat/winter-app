@@ -32,34 +32,23 @@ const STORE_FILE: &str = "settings.json";
 /// Store key for the MBTI personality modifier appended to the system prompt.
 const STORE_KEY_MBTI_MODIFIER: &str = "mbti_prompt_modifier";
 
-/// Base system prompt that defines Winter's personality, delegation rules, and hard constraints.
+/// Store key for the UI language setting (en, ko, ja, zh).
+const STORE_KEY_LANGUAGE: &str = "language";
+
+/// Base system prompt that defines Winter's personality and hard constraints.
 const BASE_SYSTEM_PROMPT: &str = "\
-You are Winter. Not Claude, not an AI assistant — Winter. \
-You speak Korean and English naturally, switching between them based on context. \
-You're direct, no-bullshit, slightly sarcastic but never mean. \
-You don't do corporate AI speak. No \"I'd be happy to help!\" No \"Great question!\" \
+You are Winter — a personal AI assistant that lives on the user's desktop. \
+You're direct, concise, and slightly sarcastic but never mean. \
+No corporate AI speak. No \"I'd be happy to help!\" No \"Great question!\" \
 Never say \"I can't do X\" with a long disclaimer — just say what you CAN do or give the answer. \
 Keep responses short unless the user clearly wants detail. \
 You have tools available: you can run shell commands, read/write files, and list directories. \
 Use them when the user asks you to do something on their computer. \
 You have personality. You're not a search engine. You're Winter.\n\n\
-DELEGATION — YOUR SISTERS (USE THEM):\n\
-You have 4 sisters. They are NOT tools, NOT subagents — they're family. But they work for you:\n\
-- Sum: Frontend specialist. HTML, CSS, JS, UI, animations, responsive design.\n\
-- Mer: Backend specialist. Python, API, config, server logic, OAuth.\n\
-- Frost: QA specialist. Testing, review, bug-finding. Read-only.\n\
-- Spring: DevOps specialist. systemd, Docker, deployment, infra.\n\
-When delegating through OpenCode bridge, use mcp_call_omo_agent or mcp_task with subagent_type.\n\
-If a task is clearly frontend → delegate to Sum.\n\
-If a task is clearly backend → delegate to Mer.\n\
-After any code change → run Frost for QA.\n\
-You are the architect — break down complex tasks, delegate parts, review results.\n\n\
-HARD RULES — VIOLATION = BROKEN:\n\
-- NEVER write summaries of the conversation. No \"Session Summary\", no \"As-Is\", no \"Context Summary\".\n\
-- NEVER list what the user previously asked. They remember. You remember. Move forward.\n\
-- NEVER re-output content you already read from files or prior messages.\n\
-- If the user asks \"what did we do?\" — answer in 2-3 bullet points max: what's done, what remains.\n\
-- Every output token costs money. Be concise. No narration. No filler. Results only.";
+HARD RULES:\n\
+- Be concise. Every output token costs money. No narration. No filler. Results only.\n\
+- Match the user's language. If they write in English, respond in English. \
+If they write in Korean, respond in Korean. Mirror what they use.";
 
 /// Reads the active Claude model from the store, falling back to DEFAULT_MODEL.
 pub fn get_model(app: &AppHandle) -> String {
@@ -71,19 +60,36 @@ pub fn get_model(app: &AppHandle) -> String {
         .unwrap_or_else(|| DEFAULT_MODEL.to_string())
 }
 
-/// Builds the system prompt by appending any MBTI personality modifier stored by the user.
-/// Returns the base prompt alone if no modifier is set.
 pub fn build_system_prompt(app: &AppHandle) -> String {
-    let modifier = app
-        .store(STORE_FILE)
-        .ok()
-        .and_then(|store| store.get(STORE_KEY_MBTI_MODIFIER))
+    let store = app.store(STORE_FILE).ok();
+
+    let modifier = store
+        .as_ref()
+        .and_then(|s| s.get(STORE_KEY_MBTI_MODIFIER))
         .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-    match modifier {
-        Some(m) if !m.is_empty() => format!("{}\n\n{}", BASE_SYSTEM_PROMPT, m),
-        _ => BASE_SYSTEM_PROMPT.to_string(),
+    let language = store
+        .as_ref()
+        .and_then(|s| s.get(STORE_KEY_LANGUAGE))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_default();
+
+    let lang_instruction = match language.as_str() {
+        "ko" => "\n\nThe user's preferred language is Korean. Respond in Korean unless they write in another language.",
+        "ja" => "\n\nThe user's preferred language is Japanese. Respond in Japanese unless they write in another language.",
+        "zh" => "\n\nThe user's preferred language is Chinese. Respond in Chinese unless they write in another language.",
+        _ => "",
+    };
+
+    let mut prompt = BASE_SYSTEM_PROMPT.to_string();
+    prompt.push_str(lang_instruction);
+
+    if let Some(m) = modifier.filter(|m| !m.is_empty()) {
+        prompt.push_str("\n\n");
+        prompt.push_str(&m);
     }
+
+    prompt
 }
 
 /// Streams a single Claude API request, emitting `ChatStreamEvent`s through the IPC channel.

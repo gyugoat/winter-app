@@ -183,6 +183,10 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     isStreaming
   );
 
+  const handleReplyQuestion = useCallback((requestID: string, answers: string[][]) => {
+    replyQuestion(requestID, answers);
+  }, [replyQuestion]);
+
   const handleSendMessage = useCallback((text: string, images?: import('../types').ImageAttachment[], mode?: MessageMode) => {
     addToHistory(text);
     resetHistoryIndex();
@@ -401,23 +405,24 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
               </div>
             )}
             <MessageList messages={activeSession.messages} searchQuery={searchQuery} />
-            {pendingQuestion && (
+            {pendingQuestion ? (
               <QuestionDock
                 request={pendingQuestion}
-                onReply={replyQuestion}
+                onReply={handleReplyQuestion}
                 onReject={rejectQuestion}
               />
+            ) : (
+              <MessageInput
+                onSend={handleSendMessage}
+                disabled={isStreaming}
+                isStreaming={isStreaming}
+                onStop={abortOpencode}
+                onHistoryUp={getPreviousSent}
+                onHistoryDown={getNextSent}
+                fileInputRef={fileInputRef}
+                onFocusReady={(fn) => { inputFocusRef.current = fn; }}
+              />
             )}
-            <MessageInput
-              onSend={handleSendMessage}
-              disabled={isStreaming}
-              isStreaming={isStreaming}
-              onStop={abortOpencode}
-              onHistoryUp={getPreviousSent}
-              onHistoryDown={getNextSent}
-              fileInputRef={fileInputRef}
-              onFocusReady={(fn) => { inputFocusRef.current = fn; }}
-            />
           </>
         )}
         <FileChanges

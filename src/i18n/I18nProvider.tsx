@@ -20,6 +20,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
   const setLocale = useCallback(async (l: Locale) => {
     setLocaleState(l);
     try {

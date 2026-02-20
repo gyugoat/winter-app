@@ -2,9 +2,8 @@
  * useAgents — manages the list of available AI agents and the active agent.
  *
  * Loads the agent configuration from Tauri Store (`settings.json → agents`).
- * Falls back to two hardcoded defaults if nothing is configured:
+ * Falls back to a hardcoded default if nothing is configured:
  * - Winter (port 6096) — the primary local assistant
- * - Seorin (port 10889) — secondary assistant
  *
  * Provides:
  * - `agents`: full list of configured agents
@@ -30,15 +29,6 @@ const DEFAULT_AGENTS: Agent[] = [
     proxyPort: 6096,
     workspace: '',
     color: '#3b82f6',
-    type: 'opencode',
-  },
-  {
-    id: 'seorin',
-    name: 'Seorin',
-    avatar: '',
-    proxyPort: 10889,
-    workspace: '',
-    color: '#8b5cf6',
     type: 'opencode',
   },
 ];

@@ -8,9 +8,11 @@
 mod claude;
 mod compaction;
 mod scheduler;
+#[allow(dead_code)]
 mod services;
 mod memory;
 mod modes;
+#[allow(dead_code)]
 mod ollama;
 mod opencode;
 
@@ -791,12 +793,35 @@ async fn opencode_send(
     let session_id_clone = oc_session_id.clone();
     let content_clone = mode.unwrap_or(MessageMode::Normal).apply(&content);
 
-    let mbti_modifier = app
-        .store(STORE_FILE)
-        .ok()
+    let store_ref = app.store(STORE_FILE).ok();
+
+    let mbti_modifier = store_ref
+        .as_ref()
         .and_then(|store| store.get(STORE_KEY_MBTI_MODIFIER))
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .filter(|s| !s.is_empty());
+
+    let lang_code = store_ref
+        .as_ref()
+        .and_then(|store| store.get("language"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "en".to_string());
+
+    let lang_instruction = match lang_code.as_str() {
+        "ko" => None,
+        "ja" => Some("Respond in Japanese (日本語で回答してください).".to_string()),
+        "zh" => Some("Respond in Chinese (请用中文回答).".to_string()),
+        _ => None,
+    };
+
+    let system_prompt = match (&mbti_modifier, &lang_instruction) {
+        (Some(m), Some(l)) => Some(format!("{} {}", m, l)),
+        (Some(m), None) => Some(m.clone()),
+        (None, Some(l)) => Some(l.clone()),
+        (None, None) => None,
+    };
+
+    drop(store_ref);
 
     let known_msg_ids = client.get_known_message_ids(&oc_session_id).await;
 
@@ -810,7 +835,7 @@ async fn opencode_send(
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     if let Err(e) = prompt_client
-        .prompt_async(&session_id_clone, &content_clone, mbti_modifier.as_deref())
+        .prompt_async(&session_id_clone, &content_clone, system_prompt.as_deref())
         .await
     {
         abort_flag.store(true, Ordering::SeqCst);

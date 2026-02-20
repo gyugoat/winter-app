@@ -122,8 +122,11 @@ function highlightHtml(html: string, query: string): string {
 
 function InnerVoice({ msg }: { msg: Message }) {
   const [open, setOpen] = useState(false);
+  const reasoning = msg.reasoning;
   const tools = msg.toolActivities;
-  if (!tools || tools.length === 0) return null;
+  const hasReasoning = !!reasoning;
+  const hasTools = !!tools && tools.length > 0;
+  if (!hasReasoning && !hasTools) return null;
   return (
     <div className="inner-voice">
       <button
@@ -131,7 +134,14 @@ function InnerVoice({ msg }: { msg: Message }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className="inner-voice-icon">🔧</span>
+        <span className="inner-voice-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <circle cx="9" cy="10" r="1" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="10" r="1" fill="currentColor" stroke="none" />
+            <circle cx="15" cy="10" r="1" fill="currentColor" stroke="none" />
+          </svg>
+        </span>
         <span className="inner-voice-label">Inner voice</span>
         <span className={`inner-voice-chevron${open ? ' open' : ''}`}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -141,7 +151,8 @@ function InnerVoice({ msg }: { msg: Message }) {
       </button>
       {open && (
         <div className="inner-voice-content">
-          <ToolActivityList tools={tools} />
+          {hasReasoning && <div className="inner-voice-reasoning">{reasoning}</div>}
+          {hasTools && <ToolActivityList tools={tools} />}
         </div>
       )}
     </div>
@@ -162,7 +173,7 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery, html }: MessageR
     <div className={`message-row ${msg.role}`}>
       {msg.role === 'assistant' && (
         <div className="message-avatar">
-          <div className={`message-diamond${isStatusOnly ? ' spinning' : ''}`} />
+          <div className={`message-diamond${msg.isStreaming ? ' spinning' : ''}`} />
         </div>
       )}
       <div>
@@ -183,7 +194,7 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery, html }: MessageR
             dangerouslySetInnerHTML={{ __html: highlightText(msg.content, searchQuery) }}
           />
         ) : (
-          <div className={`message-bubble${isStreamingContent ? ' streaming' : ''}`}>{msg.content}</div>
+          <div className={`message-bubble${isStreamingContent ? ' streaming' : ''}`} style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
         )}
         {msg.role === 'assistant' && <InnerVoice msg={msg} />}
         <div className={`message-time${msg.role === 'user' ? ' user' : ''}`}>
@@ -197,6 +208,7 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery, html }: MessageR
   prev.msg.content === next.msg.content &&
   prev.msg.isStreaming === next.msg.isStreaming &&
   prev.msg.statusText === next.msg.statusText &&
+  prev.msg.reasoning === next.msg.reasoning &&
   JSON.stringify(prev.msg.toolActivities) === JSON.stringify(next.msg.toolActivities) &&
   prev.searchQuery === next.searchQuery &&
   prev.html === next.html
@@ -292,8 +304,13 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
     <div className="message-list">
       <div ref={bottomRef} />
       {visibleMessages.map((msg) => {
-        const needsMarkdown = msg.role === 'assistant' && !!msg.content && !msg.isStreaming;
-        const rawHtml = needsMarkdown ? renderMarkdown(msg.id, msg.content) : null;
+        // Skip empty assistant ghosts — no content, not streaming, no status label
+        if (msg.role === 'assistant' && !msg.content && !msg.isStreaming && !msg.statusText) {
+          return null;
+        }
+        const needsMarkdown = msg.role === 'assistant' && !!msg.content;
+        const cacheKey = msg.isStreaming ? `${msg.id}:${msg.content.length}` : msg.id;
+        const rawHtml = needsMarkdown ? renderMarkdown(cacheKey, msg.content) : null;
         const html = rawHtml && searchQuery ? highlightHtml(rawHtml, searchQuery) : rawHtml;
         return <MessageRow key={msg.id} msg={msg} searchQuery={searchQuery} html={html} />;
       })}

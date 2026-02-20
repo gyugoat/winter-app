@@ -30,6 +30,7 @@ export interface OpenCodeBridge {
   getActiveSessions: () => Session[];
   getActiveSessionId: () => string | null;
   getIsStreaming: () => boolean;
+  getLastStreamEnd: () => number;
   /** Whether useSessionStore has finished its own async init (store is open). */
   storeLoaded: boolean;
 }
@@ -64,7 +65,7 @@ export function useOpenCode(
   const {
     storeRef, setActiveSessionId, setIsDraft, setSessions, sessionCounter,
     ocToSession, ocMsgToMessage, updateSession,
-    getActiveSessions, getActiveSessionId, getIsStreaming, storeLoaded,
+    getActiveSessions, getActiveSessionId, getIsStreaming, getLastStreamEnd, storeLoaded,
   } = bridge;
   const ocConnectedRef = useRef(false);
 
@@ -95,12 +96,8 @@ export function useOpenCode(
           });
           setSessions(converted);
           sessionCounter.current = converted.length;
-          if (converted.length > 0) {
-            const restoredId =
-              typeof savedActive === 'string' && converted.some((s) => s.id === savedActive)
-                ? savedActive
-                : converted[0].id;
-            setActiveSessionId(restoredId);
+          if (typeof savedActive === 'string' && converted.some((s) => s.id === savedActive)) {
+            setActiveSessionId(savedActive);
             setIsDraft(false);
           }
         } catch (e) {
@@ -135,6 +132,8 @@ export function useOpenCode(
       if (!document.hasFocus()) return;
       if (!ocConnectedRef.current) return;
       if (getIsStreaming()) return;
+      const lastEnd = getLastStreamEnd();
+      if (lastEnd > 0 && Date.now() - lastEnd < 15_000) return;
       const activeId = getActiveSessionId();
       if (!activeId) return;
       const sessions = getActiveSessions();
@@ -155,7 +154,7 @@ export function useOpenCode(
       }
     }, 10_000);
     return () => clearInterval(interval);
-  }, [getActiveSessionId, getActiveSessions, getIsStreaming, ocMsgToMessage, updateSession]);
+  }, [getActiveSessionId, getActiveSessions, getIsStreaming, getLastStreamEnd, ocMsgToMessage, updateSession]);
 
   // ── 30-second session-list poll (catches sessions from other clients) ─────────
 

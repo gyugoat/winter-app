@@ -57,6 +57,7 @@ export function useChat() {
       getActiveSessions: useCallback(() => sessionsRef.current, []),
       getActiveSessionId: useCallback(() => activeSessionIdRef.current, []),
       getIsStreaming: useCallback(() => isStreamingRef.current, []),
+      getLastStreamEnd: useCallback(() => streaming.lastStreamEndRef.current, []),
       storeLoaded: sessionStore.loaded,
     },
     sessionStore.loadFromStore,
@@ -250,5 +251,6 @@ export function useChat() {
     reorderSessions: sessionStore.reorderSessions,
     abortOpencode,
     reloadSessions: openCode.reloadSessions,
+    updateSession: sessionStore.updateSession,
   };
 }
