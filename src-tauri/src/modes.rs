@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Available message modes for controlling agent behavior.
 /// Each mode prepends a specific prefix to the user's message before sending to OpenCode.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum MessageMode {
     /// No prefix — sends the message as-is.
     Normal,

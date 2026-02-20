@@ -452,3 +452,65 @@ will-change: opacity;
 .message-bubble-markdown > *:last-child {
   margin-bottom: 0 !important;
 }
+
+/* ── Inner voice (collapsible tool activity panel) ── */
+
+.inner-voice {
+  margin-top: 6px;
+  padding-left: 20px;
+}
+
+.inner-voice-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  padding: 3px 6px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.inner-voice-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.inner-voice-icon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.inner-voice-label {
+  letter-spacing: 0.02em;
+}
+
+.inner-voice-chevron {
+  display: flex;
+  align-items: center;
+  opacity: 0.6;
+  transition: transform 0.2s ease;
+}
+
+.inner-voice-chevron.open {
+  transform: rotate(180deg);
+}
+
+.inner-voice-content {
+  margin-top: 4px;
+  animation: innerVoiceIn 0.18s ease-out;
+}
+
+@keyframes innerVoiceIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inner-voice-content { animation: none; }
+  .inner-voice-chevron { transition: none; }
+}

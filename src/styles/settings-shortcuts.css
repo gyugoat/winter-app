@@ -1,0 +1,47 @@
+/* ── Shortcuts grid ── */
+
+.settings-shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.settings-shortcut-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: background 0.15s;
+}
+
+.settings-shortcut-card:hover {
+  background: var(--bg-hover);
+}
+
+.settings-shortcut-card {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-shortcut-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.settings-shortcut-keys {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 768px) {
+  .settings-shortcuts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

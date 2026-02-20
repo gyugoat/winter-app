@@ -393,7 +393,12 @@ async fn add_job_to_scheduler(
     let log_file = log_path(data_dir, &task_id);
     let state_ref = shared_state.cloned();
 
-    let job = Job::new_async(task.schedule.as_str(), move |_uuid, _lock| {
+    let schedule_str = if task.schedule.split_whitespace().count() == 5 {
+        format!("0 {}", task.schedule)
+    } else {
+        task.schedule.clone()
+    };
+    let job = Job::new_async(schedule_str.as_str(), move |_uuid, _lock| {
         let script_name = script_name.clone();
         let args = args.clone();
         let log_file = log_file.clone();

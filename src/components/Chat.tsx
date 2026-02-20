@@ -19,7 +19,7 @@ import { Sidebar } from './Sidebar';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { SnowBackground } from './SnowBackground';
-import { SettingsPage } from './Settings';
+import { SettingsPage } from './settings';
 import { Diamond } from './Diamond';
 import { FileChanges } from './FileChanges';
 import { FileViewer } from './FileViewer';
@@ -49,7 +49,6 @@ const TOAST_DROP_MS = 400;
 export function Chat({ onReauth, onShowReadme }: ChatProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
-  const agentState = useAgents();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesDetached, setChangesDetached] = useState(false);
@@ -65,6 +64,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     archivedSessions,
     activeSession,
     activeSessionId,
+    isDraft,
     sendMessage,
     isStreaming,
     addSession,
@@ -74,12 +74,15 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     archiveSession,
     reorderSessions,
     abortOpencode,
+    reloadSessions,
   } = useChat();
 
   const [workingDirectory, setWorkingDirectory] = useState('');
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleEditValue, setTitleEditValue] = useState('');
 
   useEffect(() => {
     invoke<string>('get_working_directory').then(setWorkingDirectory).catch(() => {});
@@ -107,9 +110,12 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
 
   const handleChangeDirectory = useCallback((dir: string) => {
     invoke('set_working_directory', { directory: dir })
-      .then(() => setWorkingDirectory(dir))
+      .then(() => {
+        setWorkingDirectory(dir);
+        reloadSessions();
+      })
       .catch((err) => console.error('Failed to set directory:', err));
-  }, []);
+  }, [reloadSessions]);
 
   const handleOpenFile = useCallback((filePath: string | null) => {
     if (!filePath) { setActiveTab(null); return; }
@@ -183,11 +189,19 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     sendMessage(text, images, mode);
   }, [sendMessage, addToHistory, resetHistoryIndex]);
 
+  const agentState = useAgents();
+
   const triggerDiamondGlow = useCallback(() => {
     setDiamondGlow(true);
     if (glowTimerRef.current) clearTimeout(glowTimerRef.current);
     glowTimerRef.current = setTimeout(() => setDiamondGlow(false), DIAMOND_ANIM_DURATION);
   }, []);
+
+  const handleAgentSwitch = useCallback(() => {
+    abortOpencode();
+    reloadSessions();
+    triggerDiamondGlow();
+  }, [abortOpencode, reloadSessions, triggerDiamondGlow]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -217,7 +231,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   return (
     <div className="chat-layout">
       <Titlebar />
-      <AgentBar agents={agentState} />
+      <AgentBar agents={agentState} onSwitch={handleAgentSwitch} />
       <div className={`chat-body${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}${changesOpen && !changesDetached ? ' changes-open' : ''}`}>
         <Sidebar
           open={sidebarOpen}
@@ -336,7 +350,55 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
         ) : (
           <>
             {activeSession.name && (
-              <div className="chat-session-title">{activeSession.name}</div>
+              <div className="chat-session-title">
+                {isDraft ? (
+                  <span className="chat-session-title-text chat-session-title-text--draft">
+                    {activeSession.name}
+                  </span>
+                ) : editingTitle ? (
+                  <input
+                    className="chat-session-title-input"
+                    value={titleEditValue}
+                    onChange={(e) => setTitleEditValue(e.target.value)}
+                    onBlur={() => {
+                      if (titleEditValue.trim() && titleEditValue.trim() !== activeSession.name) {
+                        renameSession(activeSessionId, titleEditValue.trim());
+                      }
+                      setEditingTitle(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                      if (e.key === 'Enter') {
+                        if (titleEditValue.trim() && titleEditValue.trim() !== activeSession.name) {
+                          renameSession(activeSessionId, titleEditValue.trim());
+                        }
+                        setEditingTitle(false);
+                      }
+                      if (e.key === 'Escape') {
+                        setEditingTitle(false);
+                      }
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="chat-session-title-text"
+                    onClick={() => { setEditingTitle(true); setTitleEditValue(activeSession.name); }}
+                    title="Click to rename"
+                  >
+                    {activeSession.name}
+                  </span>
+                )}
+                {workingDirectory && (
+                  <button
+                    className="chat-folder-label"
+                    onClick={() => setSettingsPage('folder')}
+                    title={workingDirectory}
+                  >
+                    {workingDirectory.split('/').pop() || workingDirectory}
+                  </button>
+                )}
+              </div>
             )}
             <MessageList messages={activeSession.messages} searchQuery={searchQuery} />
             {pendingQuestion && (

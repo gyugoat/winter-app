@@ -12,6 +12,7 @@ import { useEffect, useRef, useMemo, useState, useCallback, memo } from 'react';
 import { useI18n } from '../i18n';
 import { useMarkdownWorker } from '../hooks/useMarkdownWorker';
 import type { Message } from '../types';
+import { ToolActivityList } from './ToolActivity';
 import '../styles/messages.css';
 
 function TypewriterStatus({ text }: { text: string }) {
@@ -119,6 +120,34 @@ function highlightHtml(html: string, query: string): string {
   });
 }
 
+function InnerVoice({ msg }: { msg: Message }) {
+  const [open, setOpen] = useState(false);
+  const tools = msg.toolActivities;
+  if (!tools || tools.length === 0) return null;
+  return (
+    <div className="inner-voice">
+      <button
+        className="inner-voice-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="inner-voice-icon">🔧</span>
+        <span className="inner-voice-label">Inner voice</span>
+        <span className={`inner-voice-chevron${open ? ' open' : ''}`}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <div className="inner-voice-content">
+          <ToolActivityList tools={tools} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface MessageRowProps {
   msg: Message;
   searchQuery: string;
@@ -156,6 +185,7 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery, html }: MessageR
         ) : (
           <div className={`message-bubble${isStreamingContent ? ' streaming' : ''}`}>{msg.content}</div>
         )}
+        {msg.role === 'assistant' && <InnerVoice msg={msg} />}
         <div className={`message-time${msg.role === 'user' ? ' user' : ''}`}>
           {formatTime(msg.timestamp)}
         </div>
@@ -167,6 +197,7 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery, html }: MessageR
   prev.msg.content === next.msg.content &&
   prev.msg.isStreaming === next.msg.isStreaming &&
   prev.msg.statusText === next.msg.statusText &&
+  JSON.stringify(prev.msg.toolActivities) === JSON.stringify(next.msg.toolActivities) &&
   prev.searchQuery === next.searchQuery &&
   prev.html === next.html
 );

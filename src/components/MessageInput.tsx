@@ -6,7 +6,6 @@
  * - Image attachments via paste, drag-drop, or file picker
  * - Send on Enter (Shift+Enter = newline), Ctrl+↑/↓ for message history
  * - Stop button while streaming
- * - Mode selector pill for Normal / Search / Analyze
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useClickFlash } from '../hooks/useClickFlash';
@@ -35,13 +34,6 @@ interface MessageInputProps {
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
-/** Labels for each mode option — emoji kept simple for cross-platform rendering */
-const MODE_OPTIONS: { value: MessageMode; label: string; title: string }[] = [
-  { value: 'normal', label: 'Normal', title: 'Standard chat mode' },
-  { value: 'search', label: '🔍 Search', title: 'Search mode — injects a search prefix' },
-  { value: 'analyze', label: '🧠 Analyze', title: 'Analysis mode — injects an analysis prefix' },
-];
-
 /**
  * Converts a File to a base64-encoded ImageAttachment.
  * Returns null if the file exceeds the 5 MB limit.
@@ -60,13 +52,11 @@ function fileToBase64(file: File): Promise<ImageAttachment | null> {
   });
 }
 
-/** The main message composition bar with mode selector, textarea, image previews, and send/stop button */
 export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryUp, onHistoryDown, fileInputRef: externalFileRef, onFocusReady }: MessageInputProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
   const [text, setText] = useState('');
   const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([]);
-  const [mode, setMode] = useState<MessageMode>('normal');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const internalFileRef = useRef<HTMLInputElement>(null);
   const fileInputRef = externalFileRef ?? internalFileRef;
@@ -87,13 +77,13 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if ((!trimmed && attachedImages.length === 0) || disabled) return;
-    onSend(trimmed, attachedImages.length > 0 ? attachedImages : undefined, mode);
+    onSend(trimmed, attachedImages.length > 0 ? attachedImages : undefined, 'normal');
     setText('');
     setAttachedImages([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [text, attachedImages, onSend, disabled, mode]);
+  }, [text, attachedImages, onSend, disabled]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -172,20 +162,6 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
         multiple
         onChange={handleFileChange}
       />
-      {/* Mode selector pill — subtle toggle above the input bubble */}
-      <div className="input-mode-bar">
-        {MODE_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            className={`input-mode-btn${mode === opt.value ? ' active' : ''}`}
-            onClick={() => setMode(opt.value)}
-            title={opt.title}
-            type="button"
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
       <div className="input-bubble">
         {attachedImages.length > 0 && (
           <div className="input-image-previews">
