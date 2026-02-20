@@ -1,329 +1,86 @@
 /**
- * useChat — the central state machine for the chat feature.
+ * useChat — facade hook for the chat feature.
  *
- * Manages:
- * - Session persistence (load/save via Tauri Store `sessions.json`)
- * - Message streaming (via Tauri Channel or fallback chat_send invoke)
- * - OpenCode server connectivity check (every 30 s)
- * - Token usage tracking (per-session + weekly rolling window)
- * - Session CRUD: add, switch, delete, rename, archive, reorder
+ * Composes three focused sub-hooks into the single interface that all
+ * consuming components depend on:
  *
- * The "draft" session (`isDraft = true`) is the pre-send state before the
- * first message creates a real session with a generated name.
+ * - {@link useSessionStore} — session CRUD, persistence, weekly usage
+ * - {@link useStreaming}    — AI response streaming + throttled flushes
+ * - {@link useOpenCode}     — OC server connectivity + session bridge
  *
- * Streaming is throttled to flush state every 80 ms to avoid excessive renders.
+ * The public return type is identical to the original monolithic hook so that
+ * `Chat.tsx` and any other consumers require zero import changes.
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { invoke, Channel } from '@tauri-apps/api/core';
-import { load, type Store } from '@tauri-apps/plugin-store';
-import type { Message, Session, ChatStreamEvent, ImageAttachment, MessageMode } from '../types';
+import { useState, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import type { Message, ImageAttachment, MessageMode, Session } from '../types';
+import { uid } from '../utils/uid';
+import { useSessionStore } from './useSessionStore';
+import { useStreaming } from './useStreaming';
+import { useOpenCode } from './useOpenCode';
 
-const STORE_FILE = 'sessions.json';
-const STORE_KEY_SESSIONS = 'sessions';
-const STORE_KEY_ACTIVE = 'active_session_id';
-const STORE_KEY_IS_DRAFT = 'is_draft';
-const STORE_KEY_WEEKLY_USAGE = 'weekly_usage';
-const STORE_KEY_WEEKLY_RESET = 'weekly_reset_at';
-const SAVE_DEBOUNCE_MS = 500;
-
-function getWeekStart(): number {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(now.getFullYear(), now.getMonth(), diff, 0, 0, 0, 0);
-  return monday.getTime();
-}
-
-function uid(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
-
-function createSession(name: string): Session {
-  return {
-    id: uid(),
-    name,
-    messages: [],
-    createdAt: Date.now(),
-  };
-}
-
-/** Validate that loaded data is actually a Session[] */
-function isValidSessions(data: unknown): data is Session[] {
-  if (!Array.isArray(data)) return false;
-  return data.every(
-    (s) =>
-      typeof s === 'object' &&
-      s !== null &&
-      typeof (s as Session).id === 'string' &&
-      typeof (s as Session).name === 'string' &&
-      Array.isArray((s as Session).messages) &&
-      typeof (s as Session).createdAt === 'number'
-  );
-}
-
+/**
+ * Central chat hook.
+ *
+ * Delegates all state ownership to the three sub-hooks and wires them
+ * together: `sendMessage` is the main coordinator that decides whether to
+ * create a new session, call OpenCode, or fall back to the direct Claude API.
+ *
+ * @returns The full chat interface (unchanged from the original useChat).
+ */
 export function useChat() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [isDraft, setIsDraft] = useState(true);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [usage, setUsage] = useState<{ input: number; output: number }>({ input: 0, output: 0 });
-  const [weeklyUsage, setWeeklyUsage] = useState<{ input: number; output: number }>({ input: 0, output: 0 });
   const [opencodeConnected, setOpencodeConnected] = useState(false);
-  const sessionCounter = useRef(0);
-  const storeRef = useRef<Store | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load sessions from store on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const store = await load(STORE_FILE);
-        storeRef.current = store;
+  const streaming = useStreaming();
 
-        const savedSessions = await store.get<Session[]>(STORE_KEY_SESSIONS);
-        const savedActive = await store.get<string | null>(STORE_KEY_ACTIVE);
-        const savedIsDraft = await store.get<boolean>(STORE_KEY_IS_DRAFT);
+  const sessionStore = useSessionStore(streaming.isStreaming, opencodeConnected);
 
-        if (isValidSessions(savedSessions) && savedSessions.length > 0) {
-          // Strip isStreaming from any messages (in case app crashed mid-stream)
-          const cleanSessions = savedSessions.map((s) => ({
-            ...s,
-            messages: s.messages.map((m) => ({ ...m, isStreaming: false })),
-          }));
-          setSessions(cleanSessions);
-          sessionCounter.current = cleanSessions.length;
+  // Stable getter refs so polling intervals never capture stale values.
+  const sessionsRef = useRef<Session[]>([]);
+  const activeSessionIdRef = useRef<string | null>(null);
+  const isStreamingRef = useRef(false);
+  sessionsRef.current = sessionStore.sessions;
+  activeSessionIdRef.current = sessionStore.activeSessionId;
+  isStreamingRef.current = streaming.isStreaming;
 
-          if (savedIsDraft === true) {
-            setIsDraft(true);
-            setActiveSessionId(null);
-          } else if (
-            typeof savedActive === 'string' &&
-            cleanSessions.some((s) => s.id === savedActive)
-          ) {
-            setActiveSessionId(savedActive);
-            setIsDraft(false);
-          } else {
-            // Active session not found, show last session
-            setActiveSessionId(cleanSessions[cleanSessions.length - 1].id);
-            setIsDraft(false);
-          }
-        }
-        const weekStart = getWeekStart();
-        const savedReset = await store.get<number>(STORE_KEY_WEEKLY_RESET);
-        if (savedReset && savedReset >= weekStart) {
-          const saved = await store.get<{ input: number; output: number }>(STORE_KEY_WEEKLY_USAGE);
-          if (saved) setWeeklyUsage(saved);
-        } else {
-          await store.set(STORE_KEY_WEEKLY_USAGE, { input: 0, output: 0 });
-          await store.set(STORE_KEY_WEEKLY_RESET, weekStart);
-          await store.save();
-        }
-      } catch {
-        // Store doesn't exist or is corrupt — start fresh
-      }
-      setLoaded(true);
-
-      invoke<boolean>('opencode_check').then((ok) => setOpencodeConnected(ok)).catch(() => setOpencodeConnected(false));
-    })();
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      invoke<boolean>('opencode_check').then((ok) => setOpencodeConnected(ok)).catch(() => setOpencodeConnected(false));
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (!loaded || isStreaming) return;
-
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      const store = storeRef.current;
-      if (!store) return;
-      try {
-          const toSave = sessions.map((s) => ({
-            ...s,
-            messages: s.messages.map(({ isStreaming: _, statusText: _st, ...rest }) => rest),
-          }));
-        await store.set(STORE_KEY_SESSIONS, toSave);
-        await store.set(STORE_KEY_ACTIVE, activeSessionId);
-        await store.set(STORE_KEY_IS_DRAFT, isDraft);
-        await store.save();
-      } catch {
-        // Silent fail on save
-      }
-    }, SAVE_DEBOUNCE_MS);
-
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [sessions, activeSessionId, isDraft, loaded, isStreaming]);
-
-  const activeSession = activeSessionId
-    ? sessions.find((s) => s.id === activeSessionId) ?? null
-    : null;
-
-  const updateSession = useCallback(
-    (id: string, updater: (s: Session) => Session) => {
-      setSessions((prev) => prev.map((s) => (s.id === id ? updater(s) : s)));
+  const openCode = useOpenCode(
+    {
+      storeRef: sessionStore.storeRef,
+      setActiveSessionId: sessionStore.setActiveSessionId,
+      setIsDraft: sessionStore.setIsDraft,
+      setSessions: sessionStore.setSessions,
+      sessionCounter: sessionStore.sessionCounter,
+      ocToSession: sessionStore.ocToSession,
+      ocMsgToMessage: sessionStore.ocMsgToMessage,
+      updateSession: sessionStore.updateSession,
+      getActiveSessions: useCallback(() => sessionsRef.current, []),
+      getActiveSessionId: useCallback(() => activeSessionIdRef.current, []),
+      getIsStreaming: useCallback(() => isStreamingRef.current, []),
+      storeLoaded: sessionStore.loaded,
     },
-    []
+    sessionStore.loadFromStore,
+    setOpencodeConnected
   );
 
-  const cancelledRef = useRef(false);
+  const handleUsage = useCallback((delta: { input: number; output: number }) => {
+    setUsage((prev) => ({ input: prev.input + delta.input, output: prev.output + delta.output }));
+    sessionStore.bumpWeeklyUsage(delta);
+  }, [sessionStore.bumpWeeklyUsage]);
 
-  const streamResponse = useCallback(
-    (sessionId: string, allMessages: Message[], ocSessionId?: string, mode?: MessageMode) => {
-      setIsStreaming(true);
-      cancelledRef.current = false;
-
-      const replyId = uid();
-      const replyMsg: Message = {
-        id: replyId,
-        role: 'assistant',
-        content: '',
-        timestamp: Date.now(),
-        isStreaming: true,
-      };
-
-      updateSession(sessionId, (s) => ({
-        ...s,
-        messages: [...s.messages, { ...replyMsg, statusText: 'thinking' }],
-      }));
-
-      // Accumulate content in closure, throttle setState to every 80ms
-      let accumulatedContent = '';
-      let currentStatusText: string | undefined = 'thinking';
-      let flushTimer: ReturnType<typeof setTimeout> | null = null;
-
-      const flushToState = () => {
-        flushTimer = null;
-        updateSession(sessionId, (s) => ({
-          ...s,
-          messages: s.messages.map((m) =>
-            m.id === replyId ? { ...m, content: accumulatedContent, statusText: currentStatusText } : m
-          ),
-        }));
-      };
-
-      const scheduleFlush = () => {
-        if (!flushTimer) {
-          flushTimer = setTimeout(flushToState, 80);
-        }
-      };
-
-      const onEvent = new Channel<ChatStreamEvent>();
-      onEvent.onmessage = (event: ChatStreamEvent) => {
-        if (cancelledRef.current) return;
-        if (event.event === 'delta') {
-          accumulatedContent += event.data.text;
-          currentStatusText = undefined;
-          scheduleFlush();
-        } else if (event.event === 'tool_start') {
-          const { name } = event.data;
-          accumulatedContent += `\n\n---\n**[Tool: ${name}]** running...\n`;
-          scheduleFlush();
-        } else if (event.event === 'tool_end') {
-          const { result } = event.data;
-          const trimmed = result.length > 2000 ? result.slice(0, 2000) + '\n...(truncated)' : result;
-          accumulatedContent += `\n\`\`\`\n${trimmed}\n\`\`\`\n`;
-          scheduleFlush();
-        } else if (event.event === 'ollama_status') {
-          const st = event.data.status;
-          const label = st === 'compressing' ? '\n*Compressing conversation history...*\n'
-            : st === 'summarizing' ? '\n*Summarizing tool output...*\n'
-            : '';
-          if (label) {
-            accumulatedContent += label;
-            scheduleFlush();
-          }
-        } else if (event.event === 'status') {
-          currentStatusText = event.data.text;
-          scheduleFlush();
-        } else if (event.event === 'usage') {
-          const delta = { input: event.data.input_tokens, output: event.data.output_tokens };
-          setUsage((prev) => ({ input: prev.input + delta.input, output: prev.output + delta.output }));
-          setWeeklyUsage((prev) => {
-            const next = { input: prev.input + delta.input, output: prev.output + delta.output };
-            if (storeRef.current) {
-              storeRef.current.set(STORE_KEY_WEEKLY_USAGE, next);
-              storeRef.current.save();
-            }
-            return next;
-          });
-        } else if (event.event === 'stream_end') {
-          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-          updateSession(sessionId, (s) => ({
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === replyId ? { ...m, content: accumulatedContent, isStreaming: false, statusText: undefined } : m
-            ),
-          }));
-          setIsStreaming(false);
-        } else if (event.event === 'error') {
-          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-          const errText = event.data.message;
-          updateSession(sessionId, (s) => ({
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === replyId
-                ? { ...m, content: `Error: ${errText}`, isStreaming: false }
-                : m
-            ),
-          }));
-          setIsStreaming(false);
-        }
-      };
-
-      const handleError = (err: unknown) => {
-        updateSession(sessionId, (s) => ({
-          ...s,
-          messages: s.messages.map((m) =>
-            m.id === replyId
-              ? { ...m, content: `Error: ${err}`, isStreaming: false }
-              : m
-          ),
-        }));
-        setIsStreaming(false);
-      };
-
-      if (opencodeConnected && ocSessionId) {
-        const lastMsg = allMessages[allMessages.length - 1];
-        invoke('opencode_send', {
-          ocSessionId,
-          content: lastMsg.content,
-          mode: mode || 'normal',
-          onEvent,
-        }).catch(handleError);
-      } else {
-        const apiMessages = allMessages.map((m) => {
-          if (m.images && m.images.length > 0) {
-            const blocks: Array<
-              | { type: 'image'; source: { type: string; media_type: string; data: string } }
-              | { type: 'text'; text: string }
-            > = m.images.map((img) => ({
-              type: 'image' as const,
-              source: { type: 'base64', media_type: img.mediaType, data: img.data },
-            }));
-            if (m.content) {
-              blocks.push({ type: 'text', text: m.content });
-            }
-            return { role: m.role, content: blocks };
-          }
-          return { role: m.role, content: m.content };
-        });
-
-        invoke('chat_send', { messages: apiMessages, onEvent }).catch(handleError);
-      }
-    },
-    [updateSession, opencodeConnected]
-  );
-
+  /**
+   * Sends a user message, optionally with image attachments.
+   *
+   * Handles the "draft → real session" transition, OpenCode session creation,
+   * and delegates to `streamResponse` for the AI reply.
+   *
+   * @param text - The text the user typed.
+   * @param images - Optional image attachments (base64 encoded).
+   * @param mode - Message mode (`normal` | `search` | `analyze`).
+   */
   const sendMessage = useCallback(
     async (text: string, images?: ImageAttachment[], mode?: MessageMode) => {
-      if (isStreaming) return;
+      if (streaming.isStreaming) return;
 
       const userMsg: Message = {
         id: uid(),
@@ -333,14 +90,22 @@ export function useChat() {
         images: images && images.length > 0 ? images : undefined,
       };
 
-      if (isDraft) {
-        sessionCounter.current += 1;
+      if (sessionStore.isDraft) {
+        sessionStore.sessionCounter.current += 1;
         const trimmed = text.trim();
-        const sessionName = trimmed.length === 0
-          ? `Session ${sessionCounter.current}`
-          : trimmed.length > 25 ? trimmed.slice(0, 25) + '...' : trimmed;
-        const newSession = createSession(sessionName);
-        newSession.messages = [userMsg];
+        const sessionName =
+          trimmed.length === 0
+            ? `Session ${sessionStore.sessionCounter.current}`
+            : trimmed.length > 25
+            ? trimmed.slice(0, 25) + '...'
+            : trimmed;
+
+        const newSession: Session = {
+          id: uid(),
+          name: sessionName,
+          messages: [userMsg],
+          createdAt: Date.now(),
+        };
 
         if (opencodeConnected) {
           try {
@@ -351,115 +116,112 @@ export function useChat() {
           }
         }
 
-        setSessions((prev) => [...prev, newSession]);
-        setActiveSessionId(newSession.id);
-        setIsDraft(false);
-        streamResponse(newSession.id, [userMsg], newSession.ocSessionId, mode);
+        sessionStore.setSessions((prev: Session[]) => [...prev, newSession]);
+        sessionStore.setActiveSessionId(newSession.id);
+        sessionStore.setIsDraft(false);
+        streaming.streamResponse(
+          newSession.id,
+          [userMsg],
+          sessionStore.updateSession,
+          handleUsage,
+          newSession.ocSessionId,
+          mode,
+          opencodeConnected
+        );
         return;
       }
 
-      if (!activeSessionId) return;
+      if (!sessionStore.activeSessionId) return;
 
-      updateSession(activeSessionId, (s) => ({
+      sessionStore.updateSession(sessionStore.activeSessionId, (s) => ({
         ...s,
         messages: [...s.messages, userMsg],
       }));
 
-      const currentSession = sessions.find((s) => s.id === activeSessionId);
-      const allMessages = currentSession
-        ? [...currentSession.messages, userMsg]
-        : [userMsg];
-
+      const currentSession = sessionStore.sessions.find(
+        (s: Session) => s.id === sessionStore.activeSessionId
+      );
+      const allMessages = currentSession ? [...currentSession.messages, userMsg] : [userMsg];
       const ocSessionId = currentSession?.ocSessionId;
 
       if (opencodeConnected && !ocSessionId) {
         try {
           const ocId = await invoke<string>('opencode_create_session');
-          updateSession(activeSessionId, (s) => ({ ...s, ocSessionId: ocId }));
-          streamResponse(activeSessionId, allMessages, ocId, mode);
+          sessionStore.updateSession(sessionStore.activeSessionId, (s) => ({ ...s, ocSessionId: ocId }));
+          streaming.streamResponse(
+            sessionStore.activeSessionId,
+            allMessages,
+            sessionStore.updateSession,
+            handleUsage,
+            ocId,
+            mode,
+            opencodeConnected
+          );
         } catch {
-          streamResponse(activeSessionId, allMessages, undefined, mode);
+          streaming.streamResponse(
+            sessionStore.activeSessionId,
+            allMessages,
+            sessionStore.updateSession,
+            handleUsage,
+            undefined,
+            mode,
+            opencodeConnected
+          );
         }
       } else {
-        streamResponse(activeSessionId, allMessages, ocSessionId, mode);
+        streaming.streamResponse(
+          sessionStore.activeSessionId,
+          allMessages,
+          sessionStore.updateSession,
+          handleUsage,
+          ocSessionId,
+          mode,
+          opencodeConnected
+        );
       }
     },
-    [activeSessionId, isDraft, isStreaming, sessions, updateSession, streamResponse, opencodeConnected]
+    [streaming, sessionStore, opencodeConnected, handleUsage]
   );
 
-  const addSession = useCallback(() => {
-    if (isDraft) return;
-    setIsDraft(true);
-    setActiveSessionId(null);
-  }, [isDraft]);
+  /**
+   * Cancels any in-progress streaming response.
+   *
+   * Sets the cancel flag, clears the streaming state, and sends an abort
+   * command to the OpenCode server if a session is active.
+   */
+  const abortOpencode = useCallback(() => {
+    streaming.cancelledRef.current = true;
+    streaming.setIsStreaming(false);
+
+    const activeId = sessionStore.activeSessionId;
+    if (activeId) {
+      sessionStore.updateSession(activeId, (s) => ({
+        ...s,
+        messages: s.messages.map((m) =>
+          m.isStreaming ? { ...m, isStreaming: false, statusText: undefined } : m
+        ),
+      }));
+    }
+
+    const session = sessionStore.activeSession;
+    if (session?.ocSessionId) {
+      invoke('opencode_abort', { ocSessionId: session.ocSessionId }).catch(() => {});
+    }
+    invoke('abort_stream').catch(() => {});
+  }, [streaming, sessionStore]);
 
   const switchSession = useCallback((id: string) => {
-    cancelledRef.current = true;
-    setActiveSessionId(id);
-    setIsDraft(false);
-  }, []);
+    streaming.cancelledRef.current = true;
+    sessionStore.switchSession(id, opencodeConnected);
+  }, [streaming.cancelledRef, sessionStore.switchSession, opencodeConnected]);
 
-  const deleteSession = useCallback(
-    (id: string) => {
-      setSessions((prev) => {
-        const next = prev.filter((s) => s.id !== id);
-        if (id === activeSessionId) {
-          const remaining = next.filter((s) => !s.archived);
-          if (remaining.length > 0) {
-            setActiveSessionId(remaining[0].id);
-            setIsDraft(false);
-          } else {
-            setActiveSessionId(null);
-            setIsDraft(true);
-          }
-        }
-        return next;
-      });
-    },
-    [activeSessionId]
-  );
+  const deleteSession = useCallback((id: string) => {
+    sessionStore.deleteSession(id, opencodeConnected);
+  }, [sessionStore.deleteSession, opencodeConnected]);
 
-  const renameSession = useCallback(
-    (id: string, name: string) => {
-      updateSession(id, (s) => ({ ...s, name }));
-    },
-    [updateSession]
-  );
-
-  const archiveSession = useCallback(
-    (id: string) => {
-      setSessions((prev) => {
-        const next = prev.map((s) => (s.id === id ? { ...s, archived: true } : s));
-        if (id === activeSessionId) {
-          const remaining = next.filter((s) => !s.archived);
-          if (remaining.length > 0) {
-            setActiveSessionId(remaining[0].id);
-            setIsDraft(false);
-          } else {
-            setActiveSessionId(null);
-            setIsDraft(true);
-          }
-        }
-        return next;
-      });
-    },
-    [activeSessionId]
-  );
-
-  const reorderSessions = useCallback((fromIdx: number, toIdx: number) => {
-    if (fromIdx === toIdx) return;
-    setSessions(prev => {
-      const active = prev.filter(s => !s.archived);
-      const archived = prev.filter(s => s.archived);
-      const next = [...active];
-      const [moved] = next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, moved);
-      return [...next, ...archived];
-    });
-  }, []);
-
-  const activeSessions = sessions.filter((s) => !s.archived);
-  const archivedSessions = sessions.filter((s) => s.archived);
+  const renameSession = useCallback((id: string, name: string) => {
+    sessionStore.renameSession(id, name, opencodeConnected);
+  }, [sessionStore.renameSession, opencodeConnected]);
 
   const draftSession: Session = {
     id: '__draft__',
@@ -468,44 +230,25 @@ export function useChat() {
     createdAt: Date.now(),
   };
 
-  const abortOpencode = useCallback(() => {
-    cancelledRef.current = true;
-    setIsStreaming(false);
-
-    if (activeSessionId) {
-      updateSession(activeSessionId, (s) => ({
-        ...s,
-        messages: s.messages.map((m) =>
-          m.isStreaming ? { ...m, isStreaming: false, statusText: undefined } : m
-        ),
-      }));
-    }
-
-    const session = activeSession;
-    if (session?.ocSessionId) {
-      invoke('opencode_abort', { ocSessionId: session.ocSessionId }).catch(() => {});
-    }
-    invoke('abort_stream').catch(() => {});
-  }, [activeSession, activeSessionId, updateSession]);
-
   return {
-    sessions: activeSessions,
-    archivedSessions,
-    activeSession: activeSession ?? draftSession,
-    activeSessionId: activeSessionId ?? '__draft__',
-    isDraft,
-    isStreaming,
-    loaded,
+    sessions: sessionStore.sessions,
+    archivedSessions: sessionStore.archivedSessions,
+    activeSession: sessionStore.activeSession ?? draftSession,
+    activeSessionId: sessionStore.activeSessionId ?? '__draft__',
+    isDraft: sessionStore.isDraft,
+    isStreaming: streaming.isStreaming,
+    loaded: sessionStore.loaded,
     usage,
-    weeklyUsage,
+    weeklyUsage: sessionStore.weeklyUsage,
     opencodeConnected,
     sendMessage,
-    addSession,
+    addSession: sessionStore.addSession,
     switchSession,
     deleteSession,
     renameSession,
-    archiveSession,
-    reorderSessions,
+    archiveSession: sessionStore.archiveSession,
+    reorderSessions: sessionStore.reorderSessions,
     abortOpencode,
+    reloadSessions: openCode.reloadSessions,
   };
 }

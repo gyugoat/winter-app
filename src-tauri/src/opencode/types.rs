@@ -26,6 +26,9 @@ pub struct OcSession {
     /// Human-readable session title (optional).
     #[serde(default)]
     pub title: Option<String>,
+    /// Parent session ID — present when this session was spawned by a subagent.
+    #[serde(default, rename = "parentID")]
+    pub parent_id: Option<String>,
     /// Session timestamps (optional).
     #[serde(default)]
     pub time: Option<OcSessionTime>,

@@ -27,6 +27,8 @@ export interface Message {
   statusText?: string;
   /** Images attached to this message (user uploads) */
   images?: ImageAttachment[];
+  /** Tool calls made during generation — shown in collapsible "Inner voice" */
+  toolActivities?: ToolActivity[];
 }
 
 /** A chat session containing an ordered list of messages */

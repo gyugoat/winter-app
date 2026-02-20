@@ -251,11 +251,10 @@ pub async fn stream_response(
     })
 }
 
-/// Executes all tool calls from a completed streaming round and returns tool result blocks.
-/// Optionally summarizes large outputs using Ollama if enabled.
 pub async fn handle_tool_use(
     tool_uses: &[(String, String, String)],
-    ollama_settings: &crate::ollama::OllamaSettings,
+    compaction_settings: &crate::compaction::CompactionSettings,
+    app: &AppHandle,
     on_event: &Channel<ChatStreamEvent>,
 ) -> Vec<ContentBlock> {
     let mut tool_result_blocks = Vec::new();
@@ -263,17 +262,12 @@ pub async fn handle_tool_use(
         let input: Value = serde_json::from_str(input_json).unwrap_or(json!({}));
         let (raw_output, is_error) = execute_tool(name, &input).await;
 
-        let output = if ollama_settings.enabled && !is_error && raw_output.len() > 3000 {
-            let _ = on_event.send(ChatStreamEvent::OllamaStatus {
+        let output = if compaction_settings.enabled && !is_error && raw_output.len() > 3000 {
+            let _ = on_event.send(ChatStreamEvent::CompactionStatus {
                 status: "summarizing".to_string(),
+                provider: compaction_settings.provider.as_str().to_string(),
             });
-            match crate::ollama::summarize(
-                &ollama_settings.base_url,
-                &ollama_settings.model,
-                &raw_output,
-            )
-            .await
-            {
+            match crate::compaction::summarize(app, compaction_settings, &raw_output).await {
                 Ok(s) => format!("[Summarized]\n{}", s),
                 Err(_) => raw_output,
             }

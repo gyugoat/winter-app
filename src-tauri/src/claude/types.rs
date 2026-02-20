@@ -128,10 +128,16 @@ pub enum ChatStreamEvent {
         message: String,
     },
     /// Ollama local model status update (compression, summarization).
+    /// Kept for backward compatibility — new code emits CompactionStatus instead.
     #[serde(rename = "ollama_status")]
     OllamaStatus {
         /// Status string (e.g. "compressing", "done", "compression_failed").
         status: String,
+    },
+    #[serde(rename = "compaction_status")]
+    CompactionStatus {
+        status: String,
+        provider: String,
     },
     /// General status text (e.g. "thinking", agent delegation status).
     #[serde(rename = "status")]

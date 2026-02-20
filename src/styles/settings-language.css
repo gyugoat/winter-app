@@ -1,0 +1,55 @@
+/* ── Language list ── */
+
+.settings-language-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-language-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: background 0.12s, color 0.12s;
+  text-align: left;
+}
+
+.settings-language-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-language-item.active {
+  background: var(--bg-elevated);
+  color: var(--accent);
+}
+
+.settings-language-item.active .settings-language-code {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings-language-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+
+.settings-language-name {
+  flex: 1;
+}

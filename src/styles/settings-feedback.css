@@ -1,0 +1,131 @@
+/* ── Feedback ── */
+
+.settings-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-smtp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-smtp-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.settings-smtp-input-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.settings-smtp-input {
+  width: 100%;
+  padding: 8px 36px 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  letter-spacing: 0.02em;
+  transition: border-color 0.15s;
+}
+
+.settings-smtp-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-smtp-input::placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+.settings-smtp-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+
+.settings-smtp-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.settings-smtp-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.settings-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-textarea:focus {
+  border-color: var(--accent);
+}
+
+.settings-feedback-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.settings-feedback-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-feedback-status.sent {
+  color: #4ade80;
+}
+
+.settings-feedback-status.error {
+  color: var(--danger-text);
+}
+
+.settings-send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-send-btn {
+  padding: 8px 24px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-send-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}

@@ -1,0 +1,344 @@
+/* ── Automation ── */
+
+.settings-automation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-automation-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 16px;
+}
+
+.settings-automation-state-text {
+  font-size: 13px;
+}
+
+.settings-automation-state-loading {
+  color: var(--text-muted);
+}
+
+.settings-automation-state-error {
+  color: var(--danger-text);
+}
+
+.settings-automation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.settings-automation-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  width: 100%;
+  text-align: left;
+  transition: opacity 0.15s;
+}
+
+.settings-automation-section-header:hover {
+  opacity: 0.8;
+}
+
+.settings-automation-section-chevron {
+  display: flex;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.settings-automation-section-chevron.open {
+  transform: rotate(90deg);
+}
+
+.settings-automation-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.settings-automation-section-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+
+.settings-automation-list {
+  padding: 0;
+  gap: 0;
+}
+
+.settings-automation-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  min-height: 44px;
+}
+
+.settings-automation-row-divider {
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-automation-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.settings-automation-status-dot.active {
+  background: #4ade80;
+}
+
+.settings-automation-status-dot.notinstalled {
+  background: var(--warning);
+}
+
+.settings-automation-status-dot.unknown {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
+.settings-automation-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-automation-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.settings-automation-label.running {
+  color: #4ade80;
+}
+
+.settings-automation-schedule {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.settings-automation-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.settings-automation-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-automation-action-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-automation-action-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.settings-automation-toggle-wrap {
+  background: transparent;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: 12px;
+  transition: opacity 0.15s;
+}
+
+.settings-automation-toggle-wrap:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-automation-toggle {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.settings-automation-toggle.on {
+  background: var(--accent);
+}
+
+.settings-automation-toggle-dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  transition: transform 0.2s;
+}
+
+.settings-automation-toggle.on .settings-automation-toggle-dot {
+  transform: translateX(16px);
+}
+
+.settings-automation-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-top: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-automation-refresh-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-automation-delete-btn {
+  color: var(--error) !important;
+}
+
+.settings-automation-delete-btn:hover:not(:disabled) {
+  background: var(--error-soft-bg) !important;
+  border-color: var(--error-soft-border) !important;
+  color: var(--error) !important;
+}
+
+.settings-automation-create-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.settings-automation-create-btn:hover {
+  opacity: 0.75;
+}
+
+.settings-automation-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+
+.settings-automation-create-input {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.settings-automation-create-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-automation-create-input::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-automation-create-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.settings-automation-create-submit {
+  flex: 1;
+  padding: 7px 12px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.settings-automation-create-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.settings-automation-create-submit:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.settings-automation-create-cancel {
+  padding: 7px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-automation-create-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}

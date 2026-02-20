@@ -1,0 +1,211 @@
+/* ── Ollama settings ── */
+
+.settings-ollama {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-ollama-toggle {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.settings-ollama-toggle.on {
+  background: var(--accent);
+}
+
+.settings-ollama-toggle-dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  transition: transform 0.2s;
+}
+
+.settings-ollama-toggle.on .settings-ollama-toggle-dot {
+  transform: translateX(16px);
+}
+
+.settings-ollama-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-ollama-status.connected { color: #4ade80; }
+.settings-ollama-status.disconnected { color: var(--danger-text); }
+.settings-ollama-status.checking { color: var(--text-muted); }
+
+.settings-ollama-refresh {
+  margin-left: auto;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-ollama-refresh:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-ollama-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  letter-spacing: 0.02em;
+  transition: border-color 0.15s;
+  margin-top: 6px;
+}
+
+.settings-ollama-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-ollama-input::placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+.settings-ollama-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.settings-ollama-model-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: all 0.15s;
+}
+
+.settings-ollama-model-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-ollama-model-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+
+.settings-ollama-install-card {
+  padding: 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-ollama-install-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-ollama-install-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-ollama-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.settings-ollama-badge--optional {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.settings-ollama-install-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.settings-ollama-install-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.settings-ollama-install-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.settings-ollama-install-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-ollama-install-btn.primary {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
+}
+
+.settings-ollama-install-btn.primary:hover {
+  opacity: 0.9;
+}
+
+.settings-ollama-installing {
+  font-size: 13px;
+  color: var(--text-muted);
+  animation: ollamaPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ollamaPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.settings-ollama-install-error {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--danger-text);
+}

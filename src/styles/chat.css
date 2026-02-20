@@ -189,6 +189,76 @@
   letter-spacing: 0.01em;
 }
 
+/* ── Session title — click-to-edit ── */
+
+.chat-session-title-text {
+  cursor: text;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background 0.15s ease;
+}
+
+.chat-session-title-text:hover {
+  background: var(--bg-hover);
+}
+
+/* Draft sessions are not renameable — no hover/cursor affordance */
+.chat-session-title-text--draft {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.chat-session-title-text--draft:hover {
+  background: transparent;
+}
+
+.chat-session-title-input {
+  font-size: inherit;
+  font-weight: inherit;
+  font-family: inherit;
+  letter-spacing: inherit;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 2px 8px;
+  outline: none;
+  min-width: 120px;
+  max-width: 500px;
+  width: auto;
+}
+
+/* ── Folder label (inline next to session title) ── */
+
+.chat-folder-label {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 12px;
+  padding: 2px 8px;
+  font-size: 0.6em;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  opacity: 0.55;
+  cursor: pointer;
+  vertical-align: middle;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 0.2s ease, background 0.2s ease;
+}
+
+.chat-folder-label:hover {
+  opacity: 1;
+  background: var(--bg-hover);
+}
+
 /* ── Tab bar (Chrome-style file tabs) ── */
 
 .tab-bar {

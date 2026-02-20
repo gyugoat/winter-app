@@ -1,8 +1,12 @@
-/// Winter App — Tauri backend entry point.
-/// This file contains only module declarations, thin Tauri command wrappers,
-/// and the `run()` function. All logic lives in the submodules.
+//! Winter App — Tauri backend entry point.
+//!
+//! Contains module declarations, thin Tauri command wrappers, OAuth helpers,
+//! and the [`run`] function that boots the Tauri application.
+//! All heavy logic lives in the submodules (`claude`, `ollama`, `opencode`,
+//! `scheduler`, `services`, `compaction`, `memory`, `modes`).
 
 mod claude;
+mod compaction;
 mod scheduler;
 mod services;
 mod memory;
@@ -26,13 +30,13 @@ use tauri_plugin_store::StoreExt;
 const STORE_FILE: &str = "settings.json";
 
 /// OAuth PKCE store key for the access token.
-const STORE_KEY_ACCESS: &str = "oauth_access_token";
+pub const STORE_KEY_ACCESS: &str = "oauth_access_token";
 
 /// OAuth PKCE store key for the refresh token.
 const STORE_KEY_REFRESH: &str = "oauth_refresh_token";
 
 /// OAuth PKCE store key for the token expiry timestamp (Unix ms).
-const STORE_KEY_EXPIRES: &str = "oauth_expires";
+pub const STORE_KEY_EXPIRES: &str = "oauth_expires";
 
 /// Anthropic OAuth token endpoint.
 const TOKEN_URL: &str = "https://console.anthropic.com/v1/oauth/token";
@@ -328,30 +332,28 @@ async fn chat_send(
     let system_prompt = build_system_prompt(&app);
     let model = get_model(&app);
     let mut conversation = messages;
-    let ollama_settings = ollama::get_settings(&app);
+    let compaction_settings = compaction::get_settings(&app);
 
-    if ollama_settings.enabled && conversation.len() > 10 {
-        let _ = on_event.send(ChatStreamEvent::OllamaStatus {
+    if compaction_settings.enabled && conversation.len() > 10 {
+        let provider_str = compaction_settings.provider.as_str().to_string();
+        let _ = on_event.send(ChatStreamEvent::CompactionStatus {
             status: "compressing".to_string(),
+            provider: provider_str.clone(),
         });
-        match ollama::compress_history(
-            &ollama_settings.base_url,
-            &ollama_settings.model,
-            &conversation,
-        )
-        .await
-        {
+        match compaction::compress_history(&app, &compaction_settings, &conversation).await {
             Ok(compressed) => {
                 conversation = compressed;
             }
             Err(_) => {
-                let _ = on_event.send(ChatStreamEvent::OllamaStatus {
+                let _ = on_event.send(ChatStreamEvent::CompactionStatus {
                     status: "compression_failed".to_string(),
+                    provider: provider_str.clone(),
                 });
             }
         }
-        let _ = on_event.send(ChatStreamEvent::OllamaStatus {
+        let _ = on_event.send(ChatStreamEvent::CompactionStatus {
             status: "done".to_string(),
+            provider: provider_str,
         });
     }
 
@@ -425,7 +427,7 @@ async fn chat_send(
             });
 
             let tool_result_blocks =
-                handle_tool_use(&result.tool_uses, &ollama_settings, &on_event).await;
+                handle_tool_use(&result.tool_uses, &compaction_settings, &app, &on_event).await;
             conversation.push(ChatMessage {
                 role: "user".to_string(),
                 content: MessageContent::Blocks(tool_result_blocks),
@@ -474,6 +476,23 @@ async fn send_feedback(_app: AppHandle, text: String) -> Result<(), String> {
         return Err(format!("Discord Error: {}", resp.status()));
     }
 
+    Ok(())
+}
+
+// ── Compaction Commands ─────────────────────────────────────────────
+
+/// Returns the currently configured context-compression provider ("ollama" or "haiku").
+#[tauri::command]
+async fn compaction_get_provider(app: AppHandle) -> String {
+    compaction::get_settings(&app).provider.as_str().to_string()
+}
+
+/// Persists the context-compression provider choice ("ollama" or "haiku").
+#[tauri::command]
+async fn compaction_set_provider(app: AppHandle, provider: String) -> Result<(), String> {
+    let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
+    store.set("compaction_provider", json!(provider));
+    store.save().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -820,10 +839,46 @@ async fn opencode_get_path(app: AppHandle) -> Result<serde_json::Value, String> 
 }
 
 /// Lists files at the given path in the OpenCode workspace.
+///
+/// Accepts both absolute and relative paths. If `path` is absolute, it is
+/// normalised to a path relative to the configured workspace directory before
+/// forwarding to the OpenCode server — this ensures that navigating into
+/// hidden/dot directories (e.g. `.winter`) works correctly regardless of
+/// whether the frontend converts the path with the user's HOME or the
+/// workspace root as the base.
+///
+/// Hidden directories (names starting with `.`) are **never** filtered out:
+/// if the user explicitly navigates into one, its full contents are returned.
 #[tauri::command]
 async fn opencode_list_files(app: AppHandle, path: String) -> Result<serde_json::Value, String> {
     let client = get_opencode_client(&app)?;
-    client.list_files(&path).await
+
+    // Normalise absolute paths → relative to workspace so OpenCode can resolve them.
+    let effective_path = if std::path::Path::new(&path).is_absolute() {
+        let workspace = get_opencode_dir(&app);
+        let workspace_path = std::path::Path::new(&workspace);
+        let abs_path = std::path::Path::new(&path);
+        match abs_path.strip_prefix(workspace_path) {
+            Ok(rel) => {
+                // Use the relative portion; fall back to "." for the root itself.
+                let rel_str = rel.to_string_lossy();
+                if rel_str.is_empty() { ".".to_string() } else { rel_str.to_string() }
+            }
+            Err(_) => {
+                // Path is outside the workspace — forward as-is and let the
+                // server decide whether to allow or reject it.
+                eprintln!(
+                    "[opencode_list_files] path '{}' is outside workspace '{}', forwarding as-is",
+                    path, workspace
+                );
+                path
+            }
+        }
+    } else {
+        path
+    };
+
+    client.list_files(&effective_path).await
 }
 
 /// Returns the content of a file in the OpenCode workspace.
@@ -875,6 +930,31 @@ async fn opencode_get_messages(
     client.get_session_messages(&session_id).await
 }
 
+/// Lists all OpenCode sessions for the current workspace directory.
+#[tauri::command]
+async fn opencode_list_sessions(app: AppHandle) -> Result<Vec<opencode::types::OcSession>, String> {
+    let client = get_opencode_client(&app)?;
+    client.list_sessions().await
+}
+
+/// Deletes the given OpenCode session permanently.
+#[tauri::command]
+async fn opencode_delete_session(app: AppHandle, session_id: String) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    client.delete_session(&session_id).await
+}
+
+/// Renames the given OpenCode session to a new title.
+#[tauri::command]
+async fn opencode_rename_session(
+    app: AppHandle,
+    session_id: String,
+    title: String,
+) -> Result<(), String> {
+    let client = get_opencode_client(&app)?;
+    client.rename_session(&session_id, &title).await
+}
+
 // ── New Commands ────────────────────────────────────────────────────
 
 /// Runs `winter-db.py recover` and returns the compact memory output.
@@ -899,6 +979,21 @@ async fn send_opencode_prompt_with_mode(
     client
         .prompt_async(&session_id, &prefixed_content, system.as_deref())
         .await
+}
+
+/// Checks if Tailscale is active on this machine by running `tailscale status --json`.
+/// Returns true if the command exits successfully (Tailscale is connected).
+#[tauri::command]
+async fn check_tailscale() -> Result<bool, String> {
+    match tokio::process::Command::new("tailscale")
+        .arg("status")
+        .arg("--json")
+        .output()
+        .await
+    {
+        Ok(output) => Ok(output.status.success()),
+        Err(_) => Ok(false),
+    }
 }
 
 // ── App Entry Point ─────────────────────────────────────────────────
@@ -938,6 +1033,8 @@ pub fn run() {
             chat_send,
             send_feedback,
             abort_stream,
+            compaction_get_provider,
+            compaction_set_provider,
             ollama_is_installed,
             ollama_install,
             ollama_check,
@@ -957,6 +1054,9 @@ pub fn run() {
             opencode_reply_question,
             opencode_reject_question,
             opencode_get_messages,
+            opencode_list_sessions,
+            opencode_delete_session,
+            opencode_rename_session,
             get_working_directory,
             set_working_directory,
             get_home_dir,
@@ -973,6 +1073,7 @@ pub fn run() {
             services::control_service,
             winter_db_recover,
             send_opencode_prompt_with_mode,
+            check_tailscale,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

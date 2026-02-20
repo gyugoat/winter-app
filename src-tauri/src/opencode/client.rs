@@ -302,6 +302,74 @@ impl OpenCodeClient {
             .map_err(|e| format!("Messages parse failed: {}", e))
     }
 
+    /// Lists all OpenCode sessions for the current workspace directory.
+    pub async fn list_sessions(&self) -> Result<Vec<OcSession>, String> {
+        let url = self.url("/session");
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to list sessions: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "List sessions failed: HTTP {} — {}",
+                status, body
+            ));
+        }
+
+        resp.json::<Vec<OcSession>>()
+            .await
+            .map_err(|e| format!("Failed to parse sessions: {}", e))
+    }
+
+    /// Deletes the given OpenCode session.
+    pub async fn delete_session(&self, session_id: &str) -> Result<(), String> {
+        let url = self.url(&format!("/session/{}", session_id));
+        let resp = self
+            .client
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to delete session: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Delete session failed: HTTP {} — {}", status, body));
+        }
+
+        Ok(())
+    }
+
+    /// Renames the given OpenCode session to the specified title.
+    pub async fn rename_session(&self, session_id: &str, title: &str) -> Result<(), String> {
+        let url = self.url(&format!("/session/{}", session_id));
+        let body = serde_json::json!({ "title": title });
+        let resp = self
+            .client
+            .patch(&url)
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to rename session: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body_text = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Rename session failed: HTTP {} — {}",
+                status, body_text
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Sends an idle "continue" ping to prevent session timeout.
     /// Used internally when no SSE activity is detected for IDLE_TIMEOUT seconds.
     async fn send_idle_ping(&self, session_id: &str, ping_num: u32, max_pings: u32) {
