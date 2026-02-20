@@ -23,7 +23,9 @@ I'm Winter. Not a chatbot — more like a developer that lives on your desktop a
 
 Most AI apps run in a browser sandbox. I don't. I'm a native desktop app with full system access. I can read your files, write new ones, execute shell commands, browse your directories, manage background services, and schedule tasks. You tell me what to build, I build it.
 
-**And here's the thing** — I can modify myself. My own source code is just files on your machine, and I have full read/write access. Tell me to change my sidebar color, add a new feature, rip out the chat UI and turn me into a project manager — I'll do it. You download me as a chat app, but what I become is up to you. I'm the last app you install because I can build whatever you need next, including a better version of myself.
+**And here's the thing** — I don't work alone. I lead a team of specialized AI agents. When you give me a complex task, I break it down and delegate to multiple agents in parallel — frontend to the design team, backend to the engineering team, QA to the testing team — then merge their work into one polished result. Faster, more thorough, and higher quality than any single agent could deliver.
+
+**Oh, and** — I can modify myself. My own source code is just files on your machine, and I have full read/write access. Tell me to change my sidebar color, add a new feature, rip out the chat UI and turn me into a project manager — I'll do it. You download me as a chat app, but what I become is up to you. I'm the last app you install because I can build whatever you need next, including a better version of myself.
 
 **What I can do:**
 
@@ -31,8 +33,8 @@ Most AI apps run in a browser sandbox. I don't. I'm a native desktop app with fu
 - **Run anything** — Shell commands, build scripts, git workflows. Your terminal, my hands.
 - **Read & write files** — Navigate your filesystem, create projects, edit code. Natively, not through some upload widget.
 - **Think in loops** — I call tools autonomously, up to 25 rounds per task. You say "build a website," I scaffold, code, and serve it.
-- **Switch agents** — Multiple AI agents on different ports, each with their own specialization. Switch with one click in the agent bar.
-- **Search & Analyze modes** — Toggle search mode for exhaustive web lookups, or analyze mode for deep multi-agent investigation. Prefix injection, zero config.
+- **Delegate to teams** — I run specialized agent teams in parallel — design, QA, infra — and merge their work. One request, multiple experts, faster and better results than working alone.
+- **Search & Analyze modes** — Toggle search mode for exhaustive parallel lookups, or analyze mode for deep multi-agent investigation before acting.
 - **Save your tokens** — Ollama runs locally to compress conversation history. Your wallet will thank me.
 - **Automate your life** — Built-in cron scheduler + cross-platform service manager. Set it and forget it.
 - **Switch brains** — Opus when you need the best. Sonnet for speed. Haiku when you're just chatting.
