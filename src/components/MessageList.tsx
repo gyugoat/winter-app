@@ -163,18 +163,23 @@ interface MessageRowProps {
   msg: Message;
   searchQuery: string;
   html: string | null;
+  isConsecutive?: boolean;
 }
 
-const MessageRow = memo(function MessageRow({ msg, searchQuery, html }: MessageRowProps) {
+const MessageRow = memo(function MessageRow({ msg, searchQuery, html, isConsecutive }: MessageRowProps) {
   const isStatusOnly = !!(msg.statusText && msg.isStreaming && !msg.content);
   const isStreamingContent = !!(msg.isStreaming && msg.content);
 
   return (
-    <div className={`message-row ${msg.role}`}>
+    <div className={`message-row ${msg.role}${isConsecutive ? ' msg-consecutive' : ''}`}>
       {msg.role === 'assistant' && (
-        <div className="message-avatar">
-          <div className={`message-diamond${msg.isStreaming ? ' spinning' : ''}`} />
-        </div>
+        isConsecutive ? (
+          <div className="message-avatar-spacer" />
+        ) : (
+          <div className="message-avatar">
+            <div className={`message-diamond${msg.isStreaming ? ' spinning' : ''}`} />
+          </div>
+        )
       )}
       <div>
         {isStatusOnly ? (
@@ -211,7 +216,8 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery, html }: MessageR
   prev.msg.reasoning === next.msg.reasoning &&
   JSON.stringify(prev.msg.toolActivities) === JSON.stringify(next.msg.toolActivities) &&
   prev.searchQuery === next.searchQuery &&
-  prev.html === next.html
+  prev.html === next.html &&
+  prev.isConsecutive === next.isConsecutive
 );
 
 const PAGE_SIZE = 10;
@@ -303,16 +309,18 @@ export function MessageList({ messages, searchQuery = '' }: MessageListProps) {
   return (
     <div className="message-list">
       <div ref={bottomRef} />
-      {visibleMessages.map((msg) => {
+      {visibleMessages.map((msg, index) => {
         // Skip empty assistant ghosts — no content, not streaming, no status label
         if (msg.role === 'assistant' && !msg.content && !msg.isStreaming && !msg.statusText) {
           return null;
         }
+        const prevMsg = visibleMessages[index + 1];
+        const isConsecutive = msg.role === 'assistant' && prevMsg?.role === 'assistant';
         const needsMarkdown = msg.role === 'assistant' && !!msg.content;
         const cacheKey = msg.isStreaming ? `${msg.id}:${msg.content.length}` : msg.id;
         const rawHtml = needsMarkdown ? renderMarkdown(cacheKey, msg.content) : null;
         const html = rawHtml && searchQuery ? highlightHtml(rawHtml, searchQuery) : rawHtml;
-        return <MessageRow key={msg.id} msg={msg} searchQuery={searchQuery} html={html} />;
+        return <MessageRow key={msg.id} msg={msg} searchQuery={searchQuery} html={html} isConsecutive={isConsecutive} />;
       })}
       {hasMore && (
         <button className="message-show-more" onClick={handleShowMore}>

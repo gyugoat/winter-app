@@ -33,11 +33,19 @@ interface MessageInputProps {
 }
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_TEXT_SIZE = 500 * 1024;
 
-/**
- * Converts a File to a base64-encoded ImageAttachment.
- * Returns null if the file exceeds the 5 MB limit.
- */
+const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.py', '.js', '.ts', '.json', '.csv', '.pdf']);
+
+function getExt(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot).toLowerCase() : '';
+}
+
+function isTextFile(file: File): boolean {
+  return TEXT_EXTENSIONS.has(getExt(file.name));
+}
+
 function fileToBase64(file: File): Promise<ImageAttachment | null> {
   if (file.size > MAX_IMAGE_SIZE) return Promise.resolve(null);
   return new Promise((resolve, reject) => {
@@ -49,6 +57,16 @@ function fileToBase64(file: File): Promise<ImageAttachment | null> {
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
+  });
+}
+
+function readAsText(file: File): Promise<string | null> {
+  if (file.size > MAX_TEXT_SIZE) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => resolve(null);
+    reader.readAsText(file);
   });
 }
 
@@ -113,12 +131,28 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
   };
 
   const processFiles = useCallback(async (files: FileList | File[]) => {
-    const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
-    if (imageFiles.length === 0) return;
-    const results = await Promise.all(imageFiles.map(fileToBase64));
-    const newImages = results.filter((r): r is ImageAttachment => r !== null);
-    if (newImages.length > 0) {
-      setAttachedImages((prev) => [...prev, ...newImages]);
+    const all = Array.from(files);
+    const imageFiles = all.filter((f) => f.type.startsWith('image/'));
+    const textFiles = all.filter((f) => isTextFile(f) && !f.type.startsWith('image/'));
+
+    if (imageFiles.length > 0) {
+      const results = await Promise.all(imageFiles.map(fileToBase64));
+      const newImages = results.filter((r): r is ImageAttachment => r !== null);
+      if (newImages.length > 0) {
+        setAttachedImages((prev) => [...prev, ...newImages]);
+      }
+    }
+
+    if (textFiles.length > 0) {
+      const blocks = await Promise.all(
+        textFiles.map(async (f) => {
+          const content = await readAsText(f);
+          if (content === null) return `[${f.name}: file too large to attach]`;
+          return `\`\`\`${f.name}\n${content}\n\`\`\``;
+        })
+      );
+      const insertion = blocks.join('\n\n') + '\n\n';
+      setText((prev) => insertion + prev);
     }
   }, []);
 
@@ -157,7 +191,7 @@ export function MessageInput({ onSend, disabled, isStreaming, onStop, onHistoryU
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,.pdf"
+        accept="image/*,.pdf,.txt,.md,.py,.js,.ts,.json,.csv"
         hidden
         multiple
         onChange={handleFileChange}

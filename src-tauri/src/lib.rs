@@ -7,6 +7,7 @@
 
 mod claude;
 mod compaction;
+mod hooks;
 mod scheduler;
 #[allow(dead_code)]
 mod services;

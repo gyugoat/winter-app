@@ -262,9 +262,38 @@ pub async fn handle_tool_use(
     app: &AppHandle,
     on_event: &Channel<ChatStreamEvent>,
 ) -> Vec<ContentBlock> {
+    let workspace = app
+        .store(STORE_FILE)
+        .ok()
+        .and_then(|store| store.get("opencode_directory"))
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .map(|h| format!("{}/.winter/workspace", h))
+                .unwrap_or_else(|_| ".".to_string())
+        });
+
     let mut tool_result_blocks = Vec::new();
     for (id, name, input_json) in tool_uses {
         let input: Value = serde_json::from_str(input_json).unwrap_or(json!({}));
+
+        let hook_result = crate::hooks::HookGuard::check(name, &input, &workspace);
+        if hook_result.action == "block" {
+            let block_msg = crate::hooks::HookGuard::block_message(&hook_result, name);
+            let _ = on_event.send(ChatStreamEvent::ToolEnd {
+                id: id.clone(),
+                result: block_msg.clone(),
+            });
+            tool_result_blocks.push(ContentBlock::ToolResult {
+                tool_use_id: id.clone(),
+                content: block_msg,
+                is_error: Some(true),
+            });
+            continue;
+        }
+
         let (raw_output, is_error) = execute_tool(name, &input).await;
 
         let output = if compaction_settings.enabled && !is_error && raw_output.len() > 3000 {

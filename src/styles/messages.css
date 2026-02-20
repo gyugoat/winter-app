@@ -114,6 +114,16 @@
   overflow: visible;
 }
 
+.message-avatar-spacer {
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.msg-consecutive {
+  margin-top: -6px;
+  transition: margin-top 0.15s ease;
+}
+
 .message-diamond {
   width: 22px;
   height: 22px;
