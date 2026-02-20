@@ -27,10 +27,12 @@ import { useClickFlash } from '../hooks/useClickFlash';
 import { useChat } from '../hooks/useChat';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useQuestion } from '../hooks/useQuestion';
+import { useAgents } from '../hooks/useAgents';
 import { useI18n } from '../i18n';
 import type { TranslationKey } from '../i18n';
 import type { MessageMode } from '../types';
 import { QuestionDock } from './QuestionDock';
+import { AgentBar } from './AgentBar';
 import '../styles/chat.css';
 
 export type SettingsPageId = 'shortcuts' | 'personalize' | 'language' | 'feedback' | 'archive' | 'ollama' | 'folder' | 'automation';
@@ -187,11 +189,19 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     sendMessage(text, images, mode);
   }, [sendMessage, addToHistory, resetHistoryIndex]);
 
+  const agentState = useAgents();
+
   const triggerDiamondGlow = useCallback(() => {
     setDiamondGlow(true);
     if (glowTimerRef.current) clearTimeout(glowTimerRef.current);
     glowTimerRef.current = setTimeout(() => setDiamondGlow(false), DIAMOND_ANIM_DURATION);
   }, []);
+
+  const handleAgentSwitch = useCallback(() => {
+    abortOpencode();
+    reloadSessions();
+    triggerDiamondGlow();
+  }, [abortOpencode, reloadSessions, triggerDiamondGlow]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -221,6 +231,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   return (
     <div className="chat-layout">
       <Titlebar />
+      <AgentBar agents={agentState} onSwitch={handleAgentSwitch} />
       <div className={`chat-body${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}${changesOpen && !changesDetached ? ' changes-open' : ''}`}>
         <Sidebar
           open={sidebarOpen}

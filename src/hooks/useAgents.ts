@@ -64,11 +64,13 @@ export interface UseAgentsReturn {
   currentAgent: Agent;
   /**
    * Switch to a different agent by ID.
+   * Persists the new agent's URL to the Tauri store so the Rust backend
+   * picks it up on the next request (`get_opencode_url()`).
    * @param id - The agent ID to switch to
    * @param onReconnect - Optional callback invoked after the agent is switched
    *                      (use to re-establish SSE connections etc.)
    */
-  switchAgent: (id: string, onReconnect?: () => void) => void;
+  switchAgent: (id: string, onReconnect?: () => void) => Promise<void>;
   /**
    * Pings a specific agent and updates `healthMap`.
    * @returns true if the agent is reachable
@@ -125,16 +127,30 @@ export function useAgents(): UseAgentsReturn {
   }, []);
 
   const switchAgent = useCallback(
-    (id: string, onReconnect?: () => void) => {
+    async (id: string, onReconnect?: () => void) => {
+      const agent = agents.find((a) => a.id === id);
+      if (!agent) return;
+
+      // 스토어에 활성 에이전트 ID + opencode URL 저장
+      // Rust backend reads opencode_url via get_opencode_url() on every request
+      try {
+        const store = await load(STORE_FILE);
+        await store.set(ACTIVE_AGENT_KEY, id);
+        await store.set('opencode_url', `http://localhost:${agent.proxyPort}`);
+        if (agent.workspace) {
+          await store.set('opencode_directory', agent.workspace);
+        }
+        await store.save();
+      } catch {
+        // Store write failed — Rust backend still has old URL, don't switch
+        console.error('[useAgents] Store write failed, agent switch aborted');
+        return;
+      }
+
       setCurrentAgentId(id);
-      // 선택 에이전트를 스토어에 저장 (fire-and-forget — return type stays void)
-      load(STORE_FILE).then((store) => {
-        store.set(ACTIVE_AGENT_KEY, id);
-        store.save();
-      }).catch(() => {});
       onReconnect?.();
     },
-    []
+    [agents]
   );
 
   const currentAgent = agents.find((a) => a.id === currentAgentId) ?? agents[0] ?? DEFAULT_AGENTS[0];
