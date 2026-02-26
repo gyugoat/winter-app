@@ -16,6 +16,17 @@ import DOMPurify from 'dompurify';
 import type { WorkerRequest, WorkerResponse } from '../workers/markdown.worker';
 
 const htmlCache = new Map<string, string>();
+const HTML_CACHE_MAX = 2000;
+
+/** Evict oldest 50% of entries when cache exceeds max size (Map preserves insertion order). */
+function evictCache() {
+  if (htmlCache.size <= HTML_CACHE_MAX) return;
+  const keys = Array.from(htmlCache.keys());
+  const evictCount = Math.floor(keys.length / 2);
+  for (let i = 0; i < evictCount; i++) {
+    htmlCache.delete(keys[i]);
+  }
+}
 
 let listeners: Array<() => void> = [];
 function subscribe(cb: () => void) {
@@ -39,7 +50,14 @@ function getWorker(): Worker {
       { type: 'module' }
     );
     workerInstance.onmessage = (e: MessageEvent<WorkerResponse>) => {
-      htmlCache.set(e.data.id, DOMPurify.sanitize(e.data.html));
+      let html = DOMPurify.sanitize(e.data.html);
+      // Wrap bare <table> elements in a scrollable container for overflow handling
+      html = html.replace(
+        /(<table[\s>])/gi,
+        '<div class="table-scroll-wrap">$1'
+      ).replace(/<\/table>/gi, '</table></div>');
+      htmlCache.set(e.data.id, html);
+      evictCache();
       snapshotVersion++;
       notify();
     };

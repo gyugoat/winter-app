@@ -159,6 +159,9 @@
   overflow: hidden;          /* 코드블록 등이 밖으로 튀어나가지 않게 */
   min-width: 0;              /* flex child shrink 허용 */
   contain: paint;
+  user-select: text;         /* 메시지 텍스트 드래그 선택 허용 */
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 /* ─────────────────────────────────────────────
@@ -219,7 +222,17 @@ will-change: opacity;
   opacity: 1;
 }
 
+.msg-pending {
+  color: var(--text-tertiary, #64748b);
+  font-style: italic;
+  opacity: 0.7;
+  animation: pending-pulse 2s ease-in-out infinite;
+}
 
+@keyframes pending-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
 
 /* ── Markdown content ── */
 
@@ -298,13 +311,18 @@ will-change: opacity;
   margin: 0.8em 0;
 }
 
-/* 표 (Table) 스타일 */
+/* 표 (Table) 스타일 — 가로 스크롤 가능하게 wrapper 처리 */
+.message-bubble-markdown .table-scroll-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0.5em 0;
+  max-width: 100%;
+}
 .message-bubble-markdown table {
   border-collapse: collapse;
   width: max-content;
   min-width: 50%;
-  max-width: 100%;
-  margin: 0.5em 0;
+  margin: 0;
 }
 .message-bubble-markdown th,
 .message-bubble-markdown td {
@@ -552,4 +570,83 @@ will-change: opacity;
 @media (prefers-reduced-motion: reduce) {
   .inner-voice-content { animation: none; }
   .inner-voice-chevron { transition: none; }
+}
+
+/* ── Mobile messages ── */
+@media (max-width: 768px) {
+  :root {
+    --chat-max-width: 100%;
+    --chat-padding-x: 12px;
+    --user-bubble-max-width: 85%;
+  }
+
+  .message-list {
+    padding: 12px var(--chat-padding-x, 12px);
+    gap: 12px;
+  }
+
+  .message-bubble {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .message-row.assistant .message-bubble {
+    padding: 0 0 0 8px !important;
+  }
+
+  .message-avatar {
+    width: 24px;
+    height: 24px;
+  }
+
+  .message-diamond {
+    width: 18px;
+    height: 18px;
+  }
+
+  .message-empty-text {
+    font-size: 28px;
+    white-space: normal;
+  }
+
+  .message-empty-diamond {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Code blocks: prevent horizontal overflow on mobile */
+  .code-block-wrap pre {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .code-block-wrap code {
+    font-size: 0.8em;
+  }
+
+  /* Tables: scrollable on mobile */
+  .message-bubble-markdown table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .message-time {
+    opacity: 1;
+    font-size: 9px;
+  }
+
+  /* Scroll performance on mobile */
+  .message-list {
+    -webkit-overflow-scrolling: touch;
+    contain: layout style;
+    will-change: scroll-position;
+  }
+}
+
+/* Touch devices: always show timestamps (no hover) */
+@media (hover: none) {
+  .message-time {
+    opacity: 0.5;
+  }
 }
