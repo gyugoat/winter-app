@@ -1,9 +1,18 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
-import { load } from '@tauri-apps/plugin-store';
+import { isTauri } from '../utils/platform';
+import { loadWebStore } from '../utils/web-store';
 import { I18nContext, getTranslations, type Locale, type TranslationKey } from './index';
 
 const STORE_FILE = 'settings.json';
 const STORE_KEY = 'language';
+
+async function getStore() {
+  if (isTauri) {
+    const { load } = await import('@tauri-apps/plugin-store');
+    return load(STORE_FILE);
+  }
+  return loadWebStore(STORE_FILE);
+}
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('en');
@@ -11,7 +20,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const store = await load(STORE_FILE);
+        const store = await getStore();
         const saved = await store.get<string>(STORE_KEY);
         if (saved && ['en', 'ko', 'ja', 'zh'].includes(saved)) {
           setLocaleState(saved as Locale);
@@ -27,7 +36,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const setLocale = useCallback(async (l: Locale) => {
     setLocaleState(l);
     try {
-      const store = await load(STORE_FILE);
+      const store = await getStore();
       await store.set(STORE_KEY, l);
       await store.save();
     } catch {}

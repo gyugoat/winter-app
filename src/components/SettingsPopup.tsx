@@ -6,7 +6,7 @@
  * even when the sidebar is collapsed.
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../utils/invoke-shim';
 import type { SettingsPageId } from './Chat';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';

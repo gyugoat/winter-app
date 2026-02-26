@@ -9,7 +9,7 @@
  * toggle_task, run_task_now, delete_task, create_task.
  */
 import { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../utils/invoke-shim';
 import { useI18n } from '../../i18n';
 import '../../styles/settings-automation.css';
 

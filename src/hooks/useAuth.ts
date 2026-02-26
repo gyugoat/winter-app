@@ -8,7 +8,7 @@
  * @returns `{ isAuthenticated, loading, getAuthorizeUrl, exchangeCode, logout }`
  */
 import { useState, useCallback, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../utils/invoke-shim';
 
 /**
  * Hook for managing OAuth authentication state.

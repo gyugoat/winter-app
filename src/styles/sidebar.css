@@ -572,6 +572,78 @@ button.settings-sub-popup-item:hover {
   }
 }
 
+/* ── Mobile sidebar: full-screen overlay ── */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-collapsed-width: 38px;
+  }
+
+  .sidebar {
+    top: 28px; /* shorter titlebar on mobile */
+    width: 38px;
+    border-radius: 0 12px 12px 0;
+  }
+
+  .sidebar.open {
+    width: 80vw;
+    max-width: 320px;
+  }
+
+  .sidebar-overlay {
+    top: 28px;
+  }
+
+  .sidebar-toggle-btn,
+  .sidebar-new-icon-btn,
+  .sidebar-gear-icon-btn {
+    width: 40px;
+    height: 40px;
+    /* Larger touch targets for mobile */
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .sidebar-session {
+    padding: 10px 10px;
+    /* Minimum 44px touch target */
+    min-height: 44px;
+  }
+
+  .sidebar-kebab {
+    opacity: 1; /* Always visible on touch */
+    width: 32px;
+    height: 32px;
+  }
+
+  .sidebar-resize-handle {
+    display: none; /* No resize on mobile */
+  }
+
+  .settings-popup {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settings-sub-popup {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+}
+
 .sidebar-session.is-dragging {
   opacity: 0.6;
   background: var(--bg-active);
@@ -579,4 +651,48 @@ button.settings-sub-popup-item:hover {
   transition: opacity 0.15s, transform 0.15s;
   user-select: none;
   cursor: grabbing;
+}
+
+/* ── Session status indicators ────────────────────────────────────── */
+
+.sidebar-indicator {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+/* Spinning diamond — session is streaming */
+.sidebar-indicator--busy {
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  background: var(--diamond-color, rgba(200, 220, 255, 0.85));
+  box-shadow: 0 0 6px var(--glow-diamond, rgba(122, 162, 247, 0.5));
+  animation: sidebarDiamondSpin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite,
+             sidebarDiamondFlicker 1s ease-in-out infinite;
+}
+
+/* Static diamond dot — unread message */
+.sidebar-indicator--unread {
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  background: var(--diamond-color, rgba(200, 220, 255, 0.85));
+  opacity: 0.8;
+}
+
+@keyframes sidebarDiamondSpin {
+  0%   { transform: rotate(45deg); }
+  20%  { transform: rotate(117deg); }
+  50%  { transform: rotate(261deg); }
+  80%  { transform: rotate(369deg); }
+  100% { transform: rotate(405deg); }
+}
+
+@keyframes sidebarDiamondFlicker {
+  0%, 100% { opacity: 1; }
+  30%      { opacity: 0.6; }
+  60%      { opacity: 0.9; }
+  80%      { opacity: 0.65; }
 }

@@ -203,7 +203,9 @@ const MessageRow = memo(function MessageRow({ msg, searchQuery, html, isConsecut
         )}
         {msg.role === 'assistant' && <InnerVoice msg={msg} />}
         <div className={`message-time${msg.role === 'user' ? ' user' : ''}`}>
-          {formatTime(msg.timestamp)}
+          {msg.role === 'user' && msg.statusText === 'pending'
+            ? <span className="msg-pending">pending</span>
+            : formatTime(msg.timestamp)}
         </div>
       </div>
     </div>

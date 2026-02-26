@@ -8,7 +8,7 @@
  * Exposes `reply` (submit selected answers) and `reject` (dismiss without answering).
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../utils/invoke-shim';
 
 export type QuestionInfo = {
   question: string;

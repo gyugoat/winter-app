@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useI18n } from '../i18n';
 import type { TranslationKey } from '../i18n/en';
+import { playMakima } from '../hooks/useMakimaSound';
 import '../styles/splash.css';
 
 const RETURN_GREETING_KEYS: TranslationKey[] = [
@@ -42,6 +43,7 @@ export function Splash({ onDone, returning = false }: SplashProps) {
     if (!clickedRef.current) {
       clickedRef.current = true;
       clickTimeRef.current = performance.now();
+      playMakima('splash');
       setShowGreeting(true);
       setTimeout(() => {
         setFadeOut(true);

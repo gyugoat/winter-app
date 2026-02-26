@@ -772,11 +772,13 @@ async fn opencode_create_session(app: AppHandle) -> Result<String, String> {
 
 /// Sends a user message to an OpenCode session, streaming events back via the IPC channel.
 /// Handles SSE subscription in a parallel task, with abort support and MBTI modifier injection.
+/// Images are passed as `[(media_type, base64_data)]` and forwarded as OpenCode "file" parts.
 #[tauri::command]
 async fn opencode_send(
     app: AppHandle,
     oc_session_id: String,
     content: String,
+    images: Option<Vec<(String, String)>>,
     mode: Option<MessageMode>,
     on_event: Channel<ChatStreamEvent>,
 ) -> Result<(), String> {
@@ -835,8 +837,9 @@ async fn opencode_send(
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
+    let imgs = images.unwrap_or_default();
     if let Err(e) = prompt_client
-        .prompt_async(&session_id_clone, &content_clone, system_prompt.as_deref())
+        .prompt_async(&session_id_clone, &content_clone, &imgs, system_prompt.as_deref())
         .await
     {
         abort_flag.store(true, Ordering::SeqCst);

@@ -5,9 +5,17 @@
  * Three wizard steps: (1) install Tailscale on desktop, (2) install on phone, (3) scan QR.
  */
 import { useState, useCallback } from 'react';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { isTauri } from '../../utils/platform';
 import QRCode from 'qrcode';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../utils/invoke-shim';
+
+async function openUrl(url: string) {
+  if (isTauri) {
+    const { openUrl: tauriOpen } = await import('@tauri-apps/plugin-opener');
+    return tauriOpen(url);
+  }
+  window.open(url, '_blank');
+}
 import { useEffect } from 'react';
 import { useI18n } from '../../i18n';
 import '../../styles/settings-personalize.css';

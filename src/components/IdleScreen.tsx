@@ -8,8 +8,9 @@
  * Any keydown or mousedown event wakes the app and unmounts this screen.
  * The `onWake` callback must be wired to clear the idle state in the parent.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Diamond } from './Diamond';
+import { playMakima } from '../hooks/useMakimaSound';
 import olafImgSrc from '../assets/olaf.png';
 
 interface IdleScreenProps {
@@ -25,17 +26,25 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
   const imageBitmapRef = useRef<HTMLImageElement | null>(null);
   const imageDataRef = useRef<Uint8ClampedArray | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [fadeOut, setFadeOut] = useState(false);
+  const clickedRef = useRef(false);
+  const clickTimeRef = useRef(0);
 
-  const handleWake = () => onWake();
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleWake);
-    window.addEventListener('mousedown', handleWake);
-    return () => {
-      window.removeEventListener('keydown', handleWake);
-      window.removeEventListener('mousedown', handleWake);
-    };
+  const handleWake = useCallback(() => {
+    if (!clickedRef.current) {
+      clickedRef.current = true;
+      clickTimeRef.current = performance.now();
+      playMakima('greeting');
+      // Same timing as Splash: 1600ms snow-fall, then 500ms fade-out
+      setTimeout(() => {
+        setFadeOut(true);
+        setTimeout(onWake, 500);
+      }, 1600);
+    }
   }, [onWake]);
+
+  // Wake only on click — the div already has onClick={handleWake}.
+  // Removed keydown/mousedown listeners so idle screen stays until clicked.
 
   useEffect(() => {
     const img = new Image();
@@ -71,18 +80,26 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
     let spawnAccum = 0; 
 
     const offCanvas = document.createElement('canvas');
-    const offCtx = offCanvas.getContext('2d')!;
+    const offCtxRaw = offCanvas.getContext('2d');
     
     const analysisCanvas = document.createElement('canvas');
-    const analysisCtx = analysisCanvas.getContext('2d')!;
+    const analysisCtxRaw = analysisCanvas.getContext('2d');
+
+    if (!offCtxRaw || !analysisCtxRaw) return;
+    const offCtx = offCtxRaw;
+    const analysisCtx = analysisCtxRaw;
 
     let imgInfo = { x: 0, y: 0, w: 0, h: 0 };
+
+    let settledY = 0;
+    let settledVY = 0;
 
     interface Particle { 
       x: number; y: number; 
       size: number; alpha: number;
       speed: number; drift: number; 
       wobble: number; settled: boolean;
+      vy: number;
     }
     const particles: Particle[] = [];
 
@@ -137,6 +154,7 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
         drift: (Math.random() - 0.5) * 0.4, 
         wobble: Math.random() * Math.PI * 2,
         settled: false,
+        vy: 0,
       });
     }
 
@@ -176,50 +194,79 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
     const sG = rgbMatch ? +rgbMatch[2] : 220;
     const sB = rgbMatch ? +rgbMatch[3] : 255;
 
+    let lastTime = 0;
+    const TARGET_INTERVAL = 1000 / 60; // 60fps baseline
+
     function draw(now: number) {
-      animId = requestAnimationFrame(draw);
-      
+      if (!lastTime) lastTime = now;
+      const dt = Math.min(now - lastTime, 100) / TARGET_INTERVAL;
+      lastTime = now;
+
       if (!startTimeRef.current) startTimeRef.current = now;
       const elapsed = now - startTimeRef.current;
       const progress = Math.min(1, elapsed / OLAF_DURATION_MS);
       const allowedBuildHeight = imgInfo.h * progress;
 
-      // 1. 눈속임 파티클
-      for(let k=0; k < TRICK_PARTICLES_PER_FRAME; k++) {
-          if (progress >= 1) break; 
-          const rx = imgInfo.x + Math.random() * imgInfo.w;
-          const ry = STACK_Y - (Math.random() * allowedBuildHeight);
-
-          const pixel = getPixelData(rx, ry);
-          if (pixel) {
-              offCtx.fillStyle = getIceColorStyle(pixel.r, pixel.g, pixel.b);
-              offCtx.beginPath();
-              offCtx.arc(rx, ry, 0.8 + Math.random(), 0, Math.PI * 2);
-              offCtx.fill();
-          }
-      }
-
-      spawnAccum += 0.8;
-      let active = 0;
-      for (let i = 0; i < particles.length; i++) {
-        if (!particles[i].settled) active++;
-      }
-      while (spawnAccum >= 1 && active < MAX_PARTICLES) {
-        spawn();
-        active++;
-        spawnAccum -= 1;
-      }
-      spawnAccum = Math.min(spawnAccum, 3);
+      const clicked = clickedRef.current;
 
       ctx!.clearRect(0, 0, W, H);
-      ctx!.drawImage(offCanvas, 0, 0, W, H);
+
+      // 1. 눈속임 파티클 (only when not clicked)
+      if (!clicked) {
+        for(let k=0; k < TRICK_PARTICLES_PER_FRAME; k++) {
+            if (progress >= 1) break; 
+            const rx = imgInfo.x + Math.random() * imgInfo.w;
+            const ry = STACK_Y - (Math.random() * allowedBuildHeight);
+
+            const pixel = getPixelData(rx, ry);
+            if (pixel) {
+                offCtx.fillStyle = getIceColorStyle(pixel.r, pixel.g, pixel.b);
+                offCtx.beginPath();
+                offCtx.arc(rx, ry, 0.8 + Math.random(), 0, Math.PI * 2);
+                offCtx.fill();
+            }
+        }
+      }
+
+      // Spawn new particles only when not clicked
+      if (!clicked) {
+        spawnAccum += 0.8 * dt;
+        let active = 0;
+        for (let i = 0; i < particles.length; i++) {
+          if (!particles[i].settled) active++;
+        }
+        while (spawnAccum >= 1 && active < MAX_PARTICLES) {
+          spawn();
+          active++;
+          spawnAccum -= 1;
+        }
+        spawnAccum = Math.min(spawnAccum, 3);
+      }
+
+      // When clicked, settled snow (offscreen canvas) falls with gravity
+      if (clicked) {
+        settledVY += 0.35 * dt;
+        settledY += settledVY * dt;
+      }
+
+      // Blit settled snow layer (with Y offset when falling)
+      ctx!.drawImage(offCanvas, 0, settledY, W, H);
+
+      let allOffScreen = true;
 
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         
-        if (!p.settled) {
-            p.y += p.speed;
-            p.x += p.drift + Math.sin(now * 0.0009 + p.wobble) * 0.2;
+        if (clicked) {
+          // All particles fall with gravity (same physics as Splash)
+          p.settled = false;
+          p.vy += 0.35 * dt;
+          p.y += p.vy * dt;
+          p.x += p.drift * 0.5 * dt;
+          if (p.y < H + 20) allOffScreen = false;
+        } else if (!p.settled) {
+            p.y += p.speed * dt;
+            p.x += (p.drift + Math.sin(now * 0.0009 + p.wobble) * 0.2) * dt;
 
             const COL_W = 3; 
             const col = Math.max(0, Math.min(COLS - 1, Math.floor(p.x / COL_W)));
@@ -230,7 +277,7 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
                 const pixel = getPixelData(p.x, collisionY);
                 
                 let shouldAccumulate = false;
-                let bump = p.size * 0.7; 
+                const bump = p.size * 0.7; 
 
                 if (pixel) {
                     const heightFromGround = STACK_Y - collisionY;
@@ -271,9 +318,15 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
         }
       }
 
-      for (let i = particles.length - 1; i >= 0; i--) {
-        if (particles[i].settled) particles.splice(i, 1);
+      if (!clicked) {
+        for (let i = particles.length - 1; i >= 0; i--) {
+          if (particles[i].settled) particles.splice(i, 1);
+        }
       }
+
+      // Stop animation when everything has fallen off screen
+      if (clicked && allOffScreen && settledY > H) return;
+      animId = requestAnimationFrame(draw);
     }
 
     // ⭐ 순서 중요! resize 먼저 -> spawn 나중에
@@ -298,11 +351,19 @@ export function IdleScreen({ onWake }: IdleScreenProps) {
         position: 'fixed', inset: 0, zIndex: 9998,
         background: 'var(--bg-deep)', animation: 'idleFadeIn 0.8s ease',
         display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default',
+        opacity: fadeOut ? 0 : 1,
+        transition: 'opacity 0.4s ease',
+        pointerEvents: fadeOut ? 'none' : 'auto',
       }}
     >
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       
-      <div style={{ position: 'relative', zIndex: 10, marginBottom: '80px' }}>
+      <div style={{
+        position: 'relative', zIndex: 10, marginBottom: '80px',
+        transition: 'transform 0.6s ease, opacity 0.4s ease',
+        transform: fadeOut ? 'scale(0.6)' : 'scale(1)',
+        opacity: fadeOut ? 0 : 1,
+      }}>
         <Diamond size={64} glow={true} />
         <style>{`@keyframes idlePulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); opacity: 0.8; } }`}</style>
       </div>

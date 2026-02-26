@@ -15,7 +15,7 @@ const SHORTCUT_KEYS: { labelKey: TranslationKey; keys: string }[] = [
   { labelKey: 'shortcutFocusChat',    keys: 'Ctrl + Enter' },
   { labelKey: 'shortcutPrevSession',  keys: 'Ctrl + [' },
   { labelKey: 'shortcutNextSession',  keys: 'Ctrl + ]' },
-  { labelKey: 'shortcutDeleteSession',keys: 'Ctrl + ⌫' },
+  { labelKey: 'shortcutDeleteSession',keys: 'Ctrl + Shift + ⌫' },
   { labelKey: 'shortcutAttachFile',   keys: 'Ctrl + K' },
   { labelKey: 'shortcutAlwaysOnTop',  keys: 'Ctrl + P' },
   { labelKey: 'shortcutPrevMessage',  keys: 'Ctrl + ↑' },

@@ -13,7 +13,8 @@
  * - `healthMap`: Record<agentId, boolean | null> — null = unchecked, true = online, false = offline
  */
 import { useState, useEffect, useCallback } from 'react';
-import { load } from '@tauri-apps/plugin-store';
+import { isTauri } from '../utils/platform';
+import { loadWebStore } from '../utils/web-store';
 import type { Agent } from '../types';
 
 const STORE_FILE = 'settings.json';
@@ -39,7 +40,14 @@ const DEFAULT_AGENTS: Agent[] = [
  */
 async function pingAgent(agent: Agent): Promise<boolean> {
   try {
-    const url = `http://localhost:${agent.proxyPort}/global/health`;
+    // In web mode, proxy is on the same origin — use relative URL for the primary agent
+    // For other agents, use their proxyPort directly (same host, different port)
+    const baseUrl = isTauri
+      ? `http://localhost:${agent.proxyPort}`
+      : agent.proxyPort === Number(window.location.port)
+        ? ''
+        : `${window.location.protocol}//${window.location.hostname}:${agent.proxyPort}`;
+    const url = `${baseUrl}/global/health`;
     const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
     return res.ok;
   } catch {
@@ -83,7 +91,9 @@ export function useAgents(): UseAgentsReturn {
   useEffect(() => {
     (async () => {
       try {
-        const store = await load(STORE_FILE);
+        const store = isTauri
+          ? await import('@tauri-apps/plugin-store').then(m => m.load(STORE_FILE))
+          : await loadWebStore(STORE_FILE);
         const savedAgents = await store.get<Agent[]>(AGENTS_KEY);
         const savedActiveId = await store.get<string>(ACTIVE_AGENT_KEY);
 
@@ -124,7 +134,9 @@ export function useAgents(): UseAgentsReturn {
       // 스토어에 활성 에이전트 ID + opencode URL 저장
       // Rust backend reads opencode_url via get_opencode_url() on every request
       try {
-        const store = await load(STORE_FILE);
+        const store = isTauri
+          ? await import('@tauri-apps/plugin-store').then(m => m.load(STORE_FILE))
+          : await loadWebStore(STORE_FILE);
         await store.set(ACTIVE_AGENT_KEY, id);
         await store.set('opencode_url', `http://localhost:${agent.proxyPort}`);
         if (agent.workspace) {

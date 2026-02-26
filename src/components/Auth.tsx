@@ -6,7 +6,15 @@
  * 2. Pasting the authorization code back into the app
  */
 import { useState } from 'react';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { isTauri } from '../utils/platform';
+
+async function openUrl(url: string) {
+  if (isTauri) {
+    const { openUrl: tauriOpen } = await import('@tauri-apps/plugin-opener');
+    return tauriOpen(url);
+  }
+  window.open(url, '_blank');
+}
 import { useI18n } from '../i18n';
 import '../styles/auth.css';
 

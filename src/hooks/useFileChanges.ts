@@ -10,7 +10,7 @@
  * home/worktree paths from the Rust backend for correct relative path resolution.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../utils/invoke-shim';
 import type { FileChange, FileTreeNode } from '../types';
 const POLL_INTERVAL = 5000;
 
@@ -127,6 +127,7 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
   const homePathRef = useRef<string>('');
   const worktreeRef = useRef<string>('');
   const opencodeDirRef = useRef<string>('');
+  const [pathReady, setPathReady] = useState(false);
   const sessionChangesCache = useRef<{ id: string; changes: FileChange[] }>({ id: '', changes: [] });
 
   const fetchHomePath = useCallback(async () => {
@@ -137,6 +138,7 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
       if (data.directory) opencodeDirRef.current = data.directory;
       if (!initialDirectory && data.directory) setDirectory(data.directory);
     } catch { /* best-effort */ }
+    setPathReady(true);
   }, [initialDirectory]);
 
   const fetchSessionChanges = useCallback(async (sessionId: string): Promise<FileChange[]> => {
@@ -234,7 +236,12 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
   const fetchAllFiles = useCallback(async () => {
     const browseDir = initialDirectory || directory;
     if (!browseDir) return;
-    const relPath = homePathRef.current ? toRelativePath(browseDir, homePathRef.current) : browseDir;
+    // Use the OpenCode workspace directory (opencodeDirRef) as the base for
+    // relative-path resolution — NOT the user's $HOME (homePathRef).
+    // The OpenCode /file endpoint expects paths relative to its workspace root,
+    // so e.g. the workspace root itself should map to "." not ".winter/workspace".
+    const base = opencodeDirRef.current || worktreeRef.current || homePathRef.current;
+    const relPath = base ? toRelativePath(browseDir, base) : browseDir;
     try {
       const data: ApiFileEntry[] = await invoke('opencode_list_files', { path: relPath });
       const tree = apiFilesToTree(data, changesMapRef.current);
@@ -260,7 +267,8 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
   }, [initialDirectory, directory]);
 
   const loadChildren = useCallback(async (dirPath: string) => {
-    const relPath = homePathRef.current ? toRelativePath(dirPath, homePathRef.current) : dirPath;
+    const base = opencodeDirRef.current || worktreeRef.current || homePathRef.current;
+    const relPath = base ? toRelativePath(dirPath, base) : dirPath;
     try {
       const data: ApiFileEntry[] = await invoke('opencode_list_files', { path: relPath });
       const children = apiFilesToTree(data, changesMapRef.current);
@@ -294,10 +302,10 @@ export function useFileChanges(ocSessionId: string | undefined, initialDirectory
   }, [directory, fetchChanges, enabled]);
 
   useEffect(() => {
-    if (viewMode === 'all' && (initialDirectory || directory)) {
+    if (viewMode === 'all' && pathReady && (initialDirectory || directory)) {
       fetchAllFiles();
     }
-  }, [viewMode, initialDirectory, directory, fetchAllFiles]);
+  }, [viewMode, pathReady, initialDirectory, directory, fetchAllFiles]);
 
   return {
     changes,

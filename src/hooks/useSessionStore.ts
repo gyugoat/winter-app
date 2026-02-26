@@ -12,8 +12,25 @@
  * in that mode).
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { load, type Store } from '@tauri-apps/plugin-store';
+import { invoke } from '../utils/invoke-shim';
+import { isTauri } from '../utils/platform';
+import { loadWebStore } from '../utils/web-store';
+
+/** Minimal Store interface — compatible with both Tauri Store and WebStore */
+export interface Store {
+  get<T>(key: string): Promise<T | null>;
+  set(key: string, value: unknown): Promise<void>;
+  save(): Promise<void>;
+}
+
+// Unified store loader — Tauri Store in desktop, WebStore in browser
+async function loadStore(filename: string): Promise<Store | null> {
+  if (isTauri) {
+    const { load } = await import('@tauri-apps/plugin-store');
+    return load(filename) as unknown as Store;
+  }
+  return loadWebStore(filename);
+}
 import type { Session, Message } from '../types';
 import { getWeekStart } from '../utils/time';
 import { isValidSessions } from '../utils/validators';
@@ -149,7 +166,7 @@ export function useSessionStore(
 
   useEffect(() => {
     (async () => {
-      const store = await load(STORE_FILE).catch(() => null);
+      const store = await loadStore(STORE_FILE).catch(() => null);
       if (store) storeRef.current = store;
 
       // Restore weekly usage (reset if the stored figure is from a past week)
@@ -173,6 +190,33 @@ export function useSessionStore(
   }, []);
 
   // ── Debounced persistence ─────────────────────────────────────────────────────
+
+  // Refs for emergency-save paths (beforeunload, visibilitychange, etc.)
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
+  const isDraftRef = useRef(isDraft);
+  isDraftRef.current = isDraft;
+
+  /** Immediate save — bypasses debounce, ignores isStreaming/ocConnected guards */
+  const flushSaveNow = useCallback(() => {
+    const store = storeRef.current;
+    if (!store) return;
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    try {
+      const toSave = sessionsRef.current
+        .filter((s) => !s.ocSessionId || s.messages.length > 0)
+        .map((s) => ({
+          ...s,
+          messages: s.messages.map(({ isStreaming: _, statusText: _st, ...rest }) => rest),
+        }));
+      store.set(STORE_KEY_SESSIONS, toSave);
+      store.set(STORE_KEY_ACTIVE, activeSessionIdRef.current);
+      store.set(STORE_KEY_IS_DRAFT, isDraftRef.current);
+      store.save();
+    } catch {
+      // best-effort — save may fail during teardown
+    }
+  }, []);
 
   useEffect(() => {
     if (!loaded || isStreaming || opencodeConnected) return;
@@ -199,6 +243,35 @@ export function useSessionStore(
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, [sessions, activeSessionId, isDraft, loaded, isStreaming, opencodeConnected]);
+
+  // ── Emergency save: beforeunload + visibilitychange + stream-end flush ───────
+
+  useEffect(() => {
+    const handleBeforeUnload = () => flushSaveNow();
+    const handleVisibility = () => { if (document.hidden) flushSaveNow(); };
+    const handleFlushEvent = () => flushSaveNow();
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('winter-flush-save', handleFlushEvent);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('winter-flush-save', handleFlushEvent);
+    };
+  }, [flushSaveNow]);
+
+  // ── Save on OC disconnect (opencodeConnected true → false) ──────────────────
+
+  const prevOcConnected = useRef(opencodeConnected);
+  useEffect(() => {
+    if (prevOcConnected.current && !opencodeConnected) {
+      // OC just disconnected — flush everything to local store
+      flushSaveNow();
+    }
+    prevOcConnected.current = opencodeConnected;
+  }, [opencodeConnected, flushSaveNow]);
 
   // ── updateSession helper ──────────────────────────────────────────────────────
 
@@ -238,15 +311,22 @@ export function useSessionStore(
     setActiveSessionId(id);
     setIsDraft(false);
 
+    // Always load messages from server when switching sessions (not just when empty).
+    // This ensures we get the latest messages even if stale data was cached.
     const target = sessionsRef.current.find((s) => s.id === id);
-    if (ocConnected && target?.ocSessionId && target.messages.length === 0) {
+    if (ocConnected && target?.ocSessionId) {
       invoke<unknown[]>('opencode_get_messages', { sessionId: target.ocSessionId })
         .then((ocMsgs) => {
           const converted = ocMsgs
             .map((m) => ocMsgToMessage(m as OcMessage))
             .filter((m): m is Message => m !== null);
           setSessions((cur) =>
-            cur.map((s) => s.id === id ? { ...s, messages: converted } : s)
+            cur.map((s) => {
+              if (s.id !== id) return s;
+              // Preserve any in-flight streaming messages
+              const streamingMsgs = s.messages.filter((m) => m.isStreaming);
+              return { ...s, messages: [...converted, ...streamingMsgs] };
+            })
           );
         })
         .catch(() => {});

@@ -6,7 +6,7 @@
  * Binary files show an error message instead of content.
  */
 import { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../utils/invoke-shim';
 import hljs from 'highlight.js';
 import '../styles/fileviewer.css';
 

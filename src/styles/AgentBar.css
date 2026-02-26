@@ -5,7 +5,7 @@
   gap: 0;
   height: 40px;
   background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  /* border-bottom removed — titlebar already has a bottom border */
   padding: 0 8px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -146,5 +146,12 @@
 
   .agent-tab {
     transition: none;
+  }
+}
+
+/* ── Mobile: hide agent bar entirely (only Winter on mobile) ── */
+@media (max-width: 768px) {
+  .agent-bar {
+    display: none;
   }
 }

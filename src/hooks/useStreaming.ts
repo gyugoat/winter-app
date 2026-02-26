@@ -6,9 +6,10 @@
  * React state flushes are batched via requestAnimationFrame instead of setTimeout.
  */
 import { useState, useCallback, useRef } from 'react';
-import { invoke, Channel } from '@tauri-apps/api/core';
+import { invoke, createChannel } from '../utils/invoke-shim';
 import type { Session, Message, ChatStreamEvent, ImageAttachment, MessageMode, ToolActivity } from '../types';
 import { uid } from '../utils/uid';
+import { playMakima } from './useMakimaSound';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -107,7 +108,11 @@ const HANDLERS: HandlerMap = {
 /** Public interface returned by useStreaming. */
 export interface StreamingAPI {
   isStreaming: boolean;
+  /** The session ID currently being streamed to (null when idle). */
+  streamingSessionId: string | null;
   cancelledRef: React.MutableRefObject<boolean>;
+  /** Cancels the active stream by setting cancelledRef AND invalidating the stream ID. */
+  cancelStream: () => void;
   streamResponse: (
     sessionId: string,
     allMessages: Message[],
@@ -125,8 +130,13 @@ export interface StreamingAPI {
 
 export function useStreaming(): StreamingAPI {
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const cancelledRef = useRef(false);
   const lastStreamEndRef = useRef<number>(0);
+  // Each streamResponse call gets a unique ID. The onmessage handler only
+  // proceeds if activeStreamIdRef still matches the ID it was created with.
+  // This prevents stale cancel signals from killing a new stream.
+  const activeStreamIdRef = useRef<string | null>(null);
 
   const streamResponse = useCallback(
     (
@@ -139,9 +149,14 @@ export function useStreaming(): StreamingAPI {
       opencodeConnected?: boolean
     ) => {
       setIsStreaming(true);
+      setStreamingSessionId(sessionId);
       cancelledRef.current = false;
+      const myStreamId = uid();
+      activeStreamIdRef.current = myStreamId;
+      console.log('[useStreaming] stream started, streamId:', myStreamId, 'cancelledRef set to FALSE');
 
       const replyId = uid();
+      console.log('[useStreaming] streamResponse called, sessionId:', sessionId, 'replyId:', replyId, 'ocSessionId:', ocSessionId);
       const replyMsg: Message = {
         id: replyId,
         role: 'assistant',
@@ -150,53 +165,86 @@ export function useStreaming(): StreamingAPI {
         isStreaming: true,
       };
 
-      updateSession(sessionId, (s) => ({
-        ...s,
-        messages: [...s.messages, { ...replyMsg, statusText: 'thinking' }],
-      }));
+      updateSession(sessionId, (s) => {
+        console.log('[useStreaming] Adding reply placeholder, session msgs:', s.messages.length, 'sessionId match:', s.id === sessionId);
+        return {
+          ...s,
+          messages: [...s.messages, { ...replyMsg, statusText: 'thinking' }],
+        };
+      });
 
       // Per-turn mutable state
       const turn = startTurn();
 
-      // rAF-based flush — coalesces rapid updates into a single paint
-      let rafId: number | null = null;
+      // Flush coalescing — uses rAF when tab is visible, setTimeout when hidden.
+      // rAF pauses in background tabs, so we fall back to setTimeout(0) to keep
+      // SSE-driven state updates (and especially finalize/sound) flowing.
+      let flushId: number | null = null;
+      let flushIsRAF = false;
 
       const flushToState = () => {
-        rafId = null;
-        updateSession(sessionId, (s) => ({
-          ...s,
-          messages: s.messages.map((m) =>
-            m.id === replyId
-              ? {
-                  ...m,
-                  content: turn.content,
-                  statusText: turn.status,
-                  toolActivities: [...turn.tools],
-                  reasoning: turn.reasoning || undefined,
-                }
-              : m
-          ),
-        }));
+        flushId = null;
+        flushIsRAF = false;
+        console.log('[useStreaming] flushToState, turn.content length:', turn.content.length, 'done:', turn.done, 'tools:', turn.tools.length);
+        updateSession(sessionId, (s) => {
+          const found = s.messages.some((m) => m.id === replyId);
+          console.log('[useStreaming] updateSession in flush, replyId found:', found, 'session.id:', s.id);
+          return {
+            ...s,
+            messages: s.messages.map((m) =>
+              m.id === replyId
+                ? {
+                    ...m,
+                    content: turn.content,
+                    statusText: turn.status,
+                    toolActivities: [...turn.tools],
+                    reasoning: turn.reasoning || undefined,
+                  }
+                : m
+            ),
+          };
+        });
+      };
+
+      const cancelFlush = () => {
+        if (flushId !== null) {
+          if (flushIsRAF) cancelAnimationFrame(flushId);
+          else clearTimeout(flushId);
+          flushId = null;
+          flushIsRAF = false;
+        }
       };
 
       const scheduleFlush = () => {
-        if (rafId !== null) return;
-        rafId = requestAnimationFrame(flushToState);
+        if (flushId !== null) return;
+        if (document.hidden) {
+          // Background tab — rAF won't fire, use setTimeout
+          flushIsRAF = false;
+          flushId = window.setTimeout(flushToState, 0);
+        } else {
+          flushIsRAF = true;
+          flushId = requestAnimationFrame(flushToState);
+        }
       };
 
       // Single end-of-stream function for all termination paths
       const finalize = (ts: TurnState) => {
-        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+        cancelFlush();
 
         if (ts.error) {
+          // Truncate to prevent huge base64 image data from flooding the chat
+          const errText = ts.error.length > 500
+            ? ts.error.slice(0, 500) + '... (truncated)'
+            : ts.error;
           updateSession(sessionId, (s) => ({
             ...s,
             messages: s.messages.map((m) =>
               m.id === replyId
-                ? { ...m, content: `Error: ${ts.error}`, isStreaming: false, toolActivities: [...ts.tools] }
+                ? { ...m, content: `Error: ${errText}`, isStreaming: false, toolActivities: [...ts.tools] }
                 : m
             ),
           }));
+          playMakima('error');
         } else if (!ts.content.trim()) {
           // No text received — remove placeholder rather than leave an empty diamond
           updateSession(sessionId, (s) => ({
@@ -219,15 +267,31 @@ export function useStreaming(): StreamingAPI {
                 : m
             ),
           }));
+          playMakima('done');
         }
 
         lastStreamEndRef.current = Date.now();
         setIsStreaming(false);
+        setStreamingSessionId(null);
+        // Trigger immediate save — bypasses useSessionStore's debounce
+        window.dispatchEvent(new Event('winter-flush-save'));
       };
 
-      const onEvent = new Channel<ChatStreamEvent>();
+      const onEvent = createChannel<ChatStreamEvent>();
       onEvent.onmessage = (event: ChatStreamEvent) => {
-        if (cancelledRef.current) {
+        const isStale = activeStreamIdRef.current !== myStreamId;
+        const isCancelled = cancelledRef.current;
+        console.log('[useStreaming] onmessage received:', event.event,
+          'cancelled:', isCancelled, 'stale:', isStale,
+          'streamId:', myStreamId, 'activeStreamId:', activeStreamIdRef.current,
+          'turn.done:', turn.done);
+        // Only honour cancellation if BOTH the cancel flag is set AND this
+        // stream is no longer the active one (stale).  A cancel flag alone
+        // could be a leftover from a previous stream that raced with our
+        // initialization.  An explicit abort (abortOpencode) sets cancel=true
+        // AND clears activeStreamIdRef, so both conditions hold.
+        if (isCancelled && isStale) {
+          console.log('[useStreaming] stream cancelled+stale, finalizing');
           finalize(turn);
           return;
         }
@@ -239,47 +303,48 @@ export function useStreaming(): StreamingAPI {
         }
 
         if (turn.done) {
+          console.log('[useStreaming] turn.done, calling finalize');
           finalize(turn);
         } else {
+          console.log('[useStreaming] scheduleFlush, flushId:', flushId, 'hidden:', document.hidden, 'turn.content.length:', turn.content.length);
           scheduleFlush();
         }
       };
 
       const handleError = (err: unknown) => {
-        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+        cancelFlush();
+        // Truncate error messages to prevent huge base64 data from flooding the UI
+        let errMsg = String(err);
+        if (errMsg.length > 500) {
+          errMsg = errMsg.slice(0, 500) + '... (truncated)';
+        }
         updateSession(sessionId, (s) => ({
           ...s,
           messages: s.messages.map((m) =>
             m.id === replyId
-              ? { ...m, content: `Error: ${err}`, isStreaming: false }
+              ? { ...m, content: `Error: ${errMsg}`, isStreaming: false }
               : m
           ),
         }));
+        playMakima('error');
         lastStreamEndRef.current = Date.now();
         setIsStreaming(false);
+        setStreamingSessionId(null);
       };
 
       // ── OpenCode vs Claude invoke branching ───────────────────────────────
 
       if (opencodeConnected && ocSessionId) {
         const lastMsg = allMessages[allMessages.length - 1];
-        if (lastMsg.images && lastMsg.images.length > 0) {
-          console.warn('[useStreaming] Images are not supported in OpenCode mode and will not be sent.');
-          updateSession(sessionId, (s) => ({
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === replyId
-                ? { ...m, content: '⚠️ Image attachments are not supported in OpenCode mode.', isStreaming: false }
-                : m
-            ),
-          }));
-          lastStreamEndRef.current = Date.now();
-          setIsStreaming(false);
-          return;
-        }
+        // Convert images to [mediaType, base64Data] tuples for Rust → OpenCode "file" parts
+        const imageTuples: [string, string][] | undefined =
+          lastMsg.images && lastMsg.images.length > 0
+            ? lastMsg.images.map((img: ImageAttachment) => [img.mediaType, img.data] as [string, string])
+            : undefined;
         invoke('opencode_send', {
           ocSessionId,
           content: lastMsg.content,
+          images: imageTuples,
           mode: mode ?? 'normal',
           onEvent,
         }).catch(handleError);
@@ -305,5 +370,11 @@ export function useStreaming(): StreamingAPI {
     []
   );
 
-  return { isStreaming, cancelledRef, streamResponse, setIsStreaming, lastStreamEndRef };
+  const cancelStream = useCallback(() => {
+    console.log('[useStreaming] cancelStream called, clearing streamId:', activeStreamIdRef.current);
+    cancelledRef.current = true;
+    activeStreamIdRef.current = null;
+  }, []);
+
+  return { isStreaming, streamingSessionId, cancelledRef, cancelStream, streamResponse, setIsStreaming, lastStreamEndRef };
 }

@@ -13,7 +13,7 @@
  * - Diamond brand mark with glow animation
  */
 import { useState, useEffect, useRef, useCallback, useMemo, useTransition, type ChangeEvent } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../utils/invoke-shim';
 import { Titlebar } from './Titlebar';
 import { Sidebar } from './Sidebar';
 import { MessageList } from './MessageList';
@@ -23,6 +23,7 @@ import { SettingsPage } from './settings';
 import { Diamond } from './Diamond';
 import { FileChanges } from './FileChanges';
 import { FileViewer } from './FileViewer';
+import { ErrorBoundary } from './ErrorBoundary';
 import { useClickFlash } from '../hooks/useClickFlash';
 import { useChat } from '../hooks/useChat';
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -50,6 +51,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
   const onFlash = useClickFlash();
   const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsTrigger, setSettingsTrigger] = useState(0);
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesDetached, setChangesDetached] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
@@ -67,6 +69,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     isDraft,
     sendMessage,
     isStreaming,
+    streamingSessionId,
     addSession,
     switchSession,
     deleteSession,
@@ -75,6 +78,9 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     reorderSessions,
     abortOpencode,
     reloadSessions,
+    busySessions,
+    unreadSessions,
+    markSessionRead,
   } = useChat();
 
   const [workingDirectory, setWorkingDirectory] = useState('');
@@ -156,11 +162,21 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     },
     onPrevSession: () => {
       const idx = sessions.findIndex((s) => s.id === activeSessionId);
-      if (idx > 0) switchSession(sessions[idx - 1].id);
+      if (idx > 0) {
+        switchSession(sessions[idx - 1].id);
+      } else if (idx === -1 && sessions.length > 0) {
+        // draft → jump to first (top) session
+        switchSession(sessions[0].id);
+      }
     },
     onNextSession: () => {
       const idx = sessions.findIndex((s) => s.id === activeSessionId);
-      if (idx >= 0 && idx < sessions.length - 1) switchSession(sessions[idx + 1].id);
+      if (idx >= 0 && idx < sessions.length - 1) {
+        switchSession(sessions[idx + 1].id);
+      } else if (idx === -1 && sessions.length > 0) {
+        // draft → jump to last (bottom) session
+        switchSession(sessions[sessions.length - 1].id);
+      }
     },
     onDeleteSession: () => {
       if (activeSessionId !== '__draft__') {
@@ -172,6 +188,8 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     onStopStreaming: () => abortOpencode(),
     onFocusInput: () => inputFocusRef.current(),
     onSearch: toggleSearch,
+    onToggleSidebar: () => setSidebarOpen((prev) => !prev),
+    onToggleSettings: () => { setSidebarOpen(true); setSettingsTrigger((n) => n + 1); },
     isStreaming,
     sessions,
     activeSessionId,
@@ -222,6 +240,30 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
     prevSettingsRef.current = settingsPage;
   }, [settingsPage, triggerDiamondGlow]);
 
+  // Augment messages: if the active session is busy (streaming from server),
+  // mark the last assistant message as isStreaming so the diamond spins in chat too.
+  const augmentedMessages = useMemo(() => {
+    const msgs = activeSession.messages;
+    if (!msgs.length) return msgs;
+    const ocSessionId = activeSession.ocSessionId;
+    const isBusy = ocSessionId ? busySessions.has(ocSessionId) : false;
+    // Also consider our own streaming (streamingSessionId matches)
+    const isOwnStream = isStreaming && streamingSessionId === activeSession.id;
+    if (!isBusy && !isOwnStream) return msgs;
+    // If already has a streaming message, no augmentation needed
+    if (msgs.some((m) => m.isStreaming)) return msgs;
+    // Find last assistant message and mark it as streaming
+    const lastIdx = msgs.length - 1;
+    for (let i = lastIdx; i >= 0; i--) {
+      if (msgs[i].role === 'assistant') {
+        const copy = [...msgs];
+        copy[i] = { ...copy[i], isStreaming: true };
+        return copy;
+      }
+    }
+    return msgs;
+  }, [activeSession.messages, activeSession.ocSessionId, busySessions, isStreaming, streamingSessionId, activeSession.id]);
+
   const [, startTransition] = useTransition();
   const handleSwitchSession = (id: string) => {
     startTransition(() => {
@@ -242,8 +284,12 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           onToggle={() => setSidebarOpen(!sidebarOpen)}
           sessions={sessions}
           activeSessionId={activeSessionId}
+          streamingSessionId={streamingSessionId}
+          busySessions={busySessions}
+          openSettingsTrigger={settingsTrigger}
+          unreadSessions={unreadSessions}
           onNewSession={() => { addSession(); setSettingsPage(null); triggerDiamondGlow(); showToast('toastNewSession'); }}
-          onSwitchSession={handleSwitchSession}
+          onSwitchSession={(id) => { handleSwitchSession(id); markSessionRead(id); }}
           onDeleteSession={(id) => { deleteSession(id); showToast('toastDeleted'); }}
           onArchiveSession={(id) => { archiveSession(id); showToast('toastArchived'); }}
           onRenameSession={renameSession}
@@ -347,12 +393,14 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
             onChangeDirectory={(dir) => { handleChangeDirectory(dir); setSettingsPage(null); }}
           />
         ) : activeTab ? (
-          <FileViewer
-            filePath={activeTab}
-            homePath={workingDirectory}
-          />
+          <ErrorBoundary>
+            <FileViewer
+              filePath={activeTab}
+              homePath={workingDirectory}
+            />
+          </ErrorBoundary>
         ) : (
-          <>
+          <ErrorBoundary>
             {activeSession.name && (
               <div className="chat-session-title">
                 {isDraft ? (
@@ -404,7 +452,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
                 )}
               </div>
             )}
-            <MessageList messages={activeSession.messages} searchQuery={searchQuery} />
+            <MessageList messages={augmentedMessages} searchQuery={searchQuery} />
             {pendingQuestion ? (
               <QuestionDock
                 request={pendingQuestion}
@@ -414,8 +462,8 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
             ) : (
               <MessageInput
                 onSend={handleSendMessage}
-                disabled={isStreaming}
-                isStreaming={isStreaming}
+                disabled={false}
+                isStreaming={isStreaming && streamingSessionId === activeSessionId}
                 onStop={abortOpencode}
                 onHistoryUp={getPreviousSent}
                 onHistoryDown={getNextSent}
@@ -423,9 +471,10 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
                 onFocusReady={(fn) => { inputFocusRef.current = fn; }}
               />
             )}
-          </>
+          </ErrorBoundary>
         )}
-        <FileChanges
+        <ErrorBoundary>
+          <FileChanges
           ocSessionId={activeSession.ocSessionId}
           open={changesOpen}
           onToggle={() => setChangesOpen(false)}
@@ -433,6 +482,7 @@ export function Chat({ onReauth, onShowReadme }: ChatProps) {
           onViewFile={handleOpenFile}
           onDetachChange={setChangesDetached}
         />
+        </ErrorBoundary>
       </div>
     </div>
   );

@@ -131,7 +131,14 @@ pub async fn stream_response(
             return Err("AUTH_EXPIRED".to_string());
         }
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("Claude API error {}: {}", status, body));
+        // Truncate error body to avoid leaking huge base64 image data into UI
+        let truncated = if body.len() > 500 {
+            let end = body.char_indices().nth(500).map(|(i, _)| i).unwrap_or(body.len());
+            format!("{}... (truncated, {} bytes total)", &body[..end], body.len())
+        } else {
+            body
+        };
+        return Err(format!("API {}: {}", status, truncated));
     }
 
     let mut stream = response.bytes_stream();

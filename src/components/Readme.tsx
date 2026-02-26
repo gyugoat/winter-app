@@ -6,7 +6,8 @@
  * the Tauri Store, fades out, then calls onDone.
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { load } from '@tauri-apps/plugin-store';
+import { isTauri } from '../utils/platform';
+import { loadWebStore } from '../utils/web-store';
 import { Titlebar } from './Titlebar';
 import { Diamond } from './Diamond';
 import { useI18n } from '../i18n';
@@ -43,7 +44,9 @@ export function Readme({ onDone }: ReadmeProps) {
 
   const handleConfirm = useCallback(async () => {
     try {
-      const store = await load(STORE_FILE);
+      const store = isTauri
+        ? await import('@tauri-apps/plugin-store').then(m => m.load(STORE_FILE))
+        : await loadWebStore(STORE_FILE);
       await store.set(STORE_KEY, true);
       await store.save();
     } catch {}

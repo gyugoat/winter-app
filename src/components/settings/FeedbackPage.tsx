@@ -5,7 +5,7 @@
  * Shows sent/error status inline for 3 seconds, then resets.
  */
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../utils/invoke-shim';
 import { useI18n } from '../../i18n';
 import '../../styles/settings-feedback.css';
 

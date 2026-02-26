@@ -5,7 +5,7 @@
  * If none fire within `timeout` ms, the idle state becomes true.
  * Returns a `wake` function that resets the timer immediately.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Events considered as "user activity" for idle detection */
 const EVENTS: (keyof WindowEventMap)[] = [
@@ -19,29 +19,32 @@ const EVENTS: (keyof WindowEventMap)[] = [
 export function useIdle(timeout: number): [boolean, () => void] {
   const [idle, setIdle] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const idleRef = useRef(false);
+  idleRef.current = idle;
 
-  const reset = () => {
-    if (idle) setIdle(false);
+  const resetTimer = useCallback(() => {
+    // Only reset the inactivity timer when NOT already idle.
+    // Once idle, only the explicit `wake` call (from IdleScreen click) can exit.
+    if (idleRef.current) return;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setIdle(true), timeout);
-  };
+  }, [timeout]);
+
+  const wake = useCallback(() => {
+    setIdle(false);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setIdle(true), timeout);
+  }, [timeout]);
 
   useEffect(() => {
     timer.current = setTimeout(() => setIdle(true), timeout);
 
-    for (const ev of EVENTS) window.addEventListener(ev, reset, { passive: true });
+    for (const ev of EVENTS) window.addEventListener(ev, resetTimer, { passive: true });
     return () => {
       clearTimeout(timer.current);
-      for (const ev of EVENTS) window.removeEventListener(ev, reset);
+      for (const ev of EVENTS) window.removeEventListener(ev, resetTimer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeout]);
-
-  const wake = () => {
-    setIdle(false);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setIdle(true), timeout);
-  };
+  }, [timeout, resetTimer]);
 
   return [idle, wake];
 }

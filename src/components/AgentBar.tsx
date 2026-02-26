@@ -109,8 +109,14 @@ export function AgentBar({ agents: agentState, onSwitch }: AgentBarProps) {
     [currentAgent.id, switchAgent, onSwitch]
   );
 
-  // Don't render the bar if there's only one agent — no point switching
+  // Don't render if config says hidden, or only one agent
   if (agents.length <= 1) return null;
+  // Check config flag — bootstrap script stores this in localStorage
+  try {
+    const flag = localStorage.getItem('winter-store:settings.json:ui_showAgentBar');
+    if (flag !== null && JSON.parse(flag) === false) return null;
+  } catch { /* ignore parse errors */ }
+
 
   return (
     <div className="agent-bar" role="tablist" aria-label="AI agents">

@@ -8,7 +8,18 @@
  * Also maintains a ring buffer of up to 20 sent messages for Ctrl+↑/↓ recall.
  */
 import { useEffect, useRef, useCallback } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isTauri } from '../utils/platform';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _getCurrentWindow: (() => any) | null = null;
+if (isTauri) {
+  import('@tauri-apps/api/window').then((mod) => {
+    _getCurrentWindow = mod.getCurrentWindow;
+  });
+}
+function getCurrentWindow() {
+  return _getCurrentWindow ? _getCurrentWindow() : null;
+}
 
 /** Maximum number of sent messages stored in history for Ctrl+↑/↓ recall */
 const MAX_HISTORY = 20;
@@ -23,6 +34,8 @@ interface ShortcutActions {
   onStopStreaming: () => void;
   onFocusInput: () => void;
   onSearch: () => void;
+  onToggleSidebar: () => void;
+  onToggleSettings: () => void;
   isStreaming: boolean;
   sessions: { id: string }[];
   activeSessionId: string;
@@ -77,6 +90,16 @@ export function useShortcuts(actions: ShortcutActions) {
         return;
       }
 
+      // Tab (no modifier) toggles sidebar — skip when focus is in an input/textarea
+      if (e.key === 'Tab' && !ctrl && !e.shiftKey && !e.altKey) {
+        const tag = (document.activeElement?.tagName || '').toLowerCase();
+        if (tag !== 'input' && tag !== 'textarea') {
+          e.preventDefault();
+          actions.onToggleSidebar();
+        }
+        return;
+      }
+
       if (!ctrl) return;
 
       if (e.key === 'Enter') {
@@ -107,6 +130,7 @@ export function useShortcuts(actions: ShortcutActions) {
           break;
 
         case 'backspace':
+          if (!e.shiftKey) break;
           e.preventDefault();
           actions.onDeleteSession();
           break;
@@ -121,11 +145,16 @@ export function useShortcuts(actions: ShortcutActions) {
           actions.onSearch();
           break;
 
+        case 'o':
+          e.preventDefault();
+          actions.onToggleSettings();
+          break;
+
         case 'p': {
           e.preventDefault();
           const win = getCurrentWindow();
           alwaysOnTopRef.current = !alwaysOnTopRef.current;
-          await win.setAlwaysOnTop(alwaysOnTopRef.current);
+          if (win) await win.setAlwaysOnTop(alwaysOnTopRef.current);
           break;
         }
       }

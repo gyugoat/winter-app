@@ -56,3 +56,20 @@
   gap: 2px;
   -webkit-app-region: no-drag;
 }
+
+/* ── Mobile: hide desktop window controls, shrink titlebar ── */
+@media (max-width: 768px) {
+  .titlebar {
+    height: 28px;
+    border-radius: 0;
+    padding: 0 12px;
+  }
+
+  .titlebar-controls {
+    display: none;
+  }
+
+  .titlebar-diamond {
+    display: none;
+  }
+}

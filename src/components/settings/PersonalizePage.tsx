@@ -5,7 +5,8 @@
  * Delegates: MobileLinkCard (self-contained), automation nav (via onNavigate prop).
  */
 import { useState, useEffect } from 'react';
-import { load } from '@tauri-apps/plugin-store';
+import { isTauri } from '../../utils/platform';
+import { loadWebStore } from '../../utils/web-store';
 import type { SettingsPageId } from '../Chat';
 import { Diamond } from '../Diamond';
 import { MBTI_PERSONALITIES } from '../../data/mbti-personalities';
@@ -36,8 +37,30 @@ export function PersonalizePage({ onFlash, onNavigate }: PersonalizePageProps) {
   useEffect(() => {
     (async () => {
       try {
-        const store = await load('settings.json');
-        const saved = await store.get<string>('mbti_type');
+        const store = isTauri
+          ? await import('@tauri-apps/plugin-store').then(m => m.load('settings.json'))
+          : await loadWebStore('settings.json');
+        let saved = await store.get<string>('mbti_type');
+
+        // In web mode, also check server-side settings as fallback
+        if (!isTauri && (!saved || saved.length !== 4)) {
+          try {
+            const resp = await fetch('/api/settings');
+            if (resp.ok) {
+              const serverSettings = await resp.json();
+              if (serverSettings.mbti_type && serverSettings.mbti_type.length === 4) {
+                saved = serverSettings.mbti_type;
+                // Sync back to local store
+                await store.set('mbti_type', saved);
+                if (serverSettings.mbti_prompt_modifier) {
+                  await store.set('mbti_prompt_modifier', serverSettings.mbti_prompt_modifier);
+                }
+                await store.save();
+              }
+            }
+          } catch {}
+        }
+
         if (saved && typeof saved === 'string' && saved.length === 4) {
           setMbtiLetters(saved.split(''));
         }
@@ -65,12 +88,27 @@ export function PersonalizePage({ onFlash, onNavigate }: PersonalizePageProps) {
     try {
       const mbtiType = newLetters.join('');
       const personality = MBTI_PERSONALITIES[mbtiType as keyof typeof MBTI_PERSONALITIES];
-      const store = await load('settings.json');
+      const store = isTauri
+        ? await import('@tauri-apps/plugin-store').then(m => m.load('settings.json'))
+        : await loadWebStore('settings.json');
       await store.set('mbti_type', mbtiType);
       if (personality) {
         await store.set('mbti_prompt_modifier', personality.promptModifier);
       }
       await store.save();
+
+      // Sync MBTI setting to proxy-server so it can inject the personality modifier
+      // into messages sent via the web UI (where Tauri backend is not available).
+      if (!isTauri && personality) {
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mbti_type: mbtiType,
+            mbti_prompt_modifier: personality.promptModifier,
+          }),
+        }).catch(() => {});
+      }
     } catch {}
   };
 

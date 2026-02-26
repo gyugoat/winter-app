@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { load } from '@tauri-apps/plugin-store';
+import { isTauri } from './utils/platform';
+import { loadWebStore } from './utils/web-store';
 import { Splash } from './components/Splash';
 import { Readme } from './components/Readme';
 import { Auth } from './components/Auth';
@@ -24,7 +25,14 @@ function App() {
   useEffect(() => {
     (async () => {
       try {
-        const store = await load('settings.json');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let store: { get<T>(key: string): Promise<T | null | undefined> };
+        if (isTauri) {
+          const { load } = await import('@tauri-apps/plugin-store');
+          store = await load('settings.json');
+        } else {
+          store = await loadWebStore('settings.json');
+        }
         const seen = await store.get<boolean>('readme_seen');
         setReadmeSeen(!!seen);
       } catch {

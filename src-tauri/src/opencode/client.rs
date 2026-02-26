@@ -89,16 +89,34 @@ impl OpenCodeClient {
 
     /// Sends a prompt to the given session asynchronously (fire-and-forget server-side).
     /// Optionally appends a system modifier. Returns immediately once the server accepts the prompt.
+    /// Images are sent as OpenCode "file" parts with data-URL encoding.
     pub async fn prompt_async(
         &self,
         session_id: &str,
         content: &str,
+        images: &[(String, String)], // (media_type, base64_data)
         system: Option<&str>,
     ) -> Result<(), String> {
         let url = self.url(&format!("/session/{}/prompt_async", session_id));
-        let mut body = serde_json::json!({
-            "parts": [{"type": "text", "text": content}]
-        });
+
+        let mut parts = Vec::<serde_json::Value>::new();
+
+        // Add image parts first (OpenCode "file" format with data: URLs)
+        for (i, (mime, b64)) in images.iter().enumerate() {
+            parts.push(serde_json::json!({
+                "type": "file",
+                "mime": mime,
+                "url": format!("data:{};base64,{}", mime, b64),
+                "filename": format!("image_{}.{}", i, mime.split('/').last().unwrap_or("png"))
+            }));
+        }
+
+        // Add text part
+        if !content.is_empty() {
+            parts.push(serde_json::json!({"type": "text", "text": content}));
+        }
+
+        let mut body = serde_json::json!({ "parts": parts });
         if let Some(s) = system {
             body["system"] = serde_json::Value::String(s.to_string());
         }
@@ -115,9 +133,16 @@ impl OpenCodeClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body_text = resp.text().await.unwrap_or_default();
+            // Truncate to avoid leaking huge base64 data in error messages
+            let truncated = if body_text.len() > 500 {
+                let end = body_text.char_indices().nth(500).map(|(i, _)| i).unwrap_or(body_text.len());
+                format!("{}... (truncated)", &body_text[..end])
+            } else {
+                body_text
+            };
             return Err(format!(
                 "Prompt failed: HTTP {} — {}",
-                status, body_text
+                status, truncated
             ));
         }
 

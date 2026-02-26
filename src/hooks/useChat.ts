@@ -12,12 +12,13 @@
  * `Chat.tsx` and any other consumers require zero import changes.
  */
 import { useState, useCallback, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../utils/invoke-shim';
 import type { Message, ImageAttachment, MessageMode, Session } from '../types';
 import { uid } from '../utils/uid';
 import { useSessionStore } from './useSessionStore';
 import { useStreaming } from './useStreaming';
 import { useOpenCode } from './useOpenCode';
+import { useGlobalSSE } from './useGlobalSSE';
 
 /**
  * Central chat hook.
@@ -43,6 +44,11 @@ export function useChat() {
   sessionsRef.current = sessionStore.sessions;
   activeSessionIdRef.current = sessionStore.activeSessionId;
   isStreamingRef.current = streaming.isStreaming;
+
+  const globalSSE = useGlobalSSE(
+    sessionStore.activeSessionId,
+    opencodeConnected
+  );
 
   const openCode = useOpenCode(
     {
@@ -81,7 +87,8 @@ export function useChat() {
    */
   const sendMessage = useCallback(
     async (text: string, images?: ImageAttachment[], mode?: MessageMode) => {
-      if (streaming.isStreaming) return;
+      // No isStreaming guard — allow sending messages while AI is responding.
+      // OpenCode queues them as pending; the AI reads them between tool calls.
 
       const userMsg: Message = {
         id: uid(),
@@ -117,7 +124,7 @@ export function useChat() {
           }
         }
 
-        sessionStore.setSessions((prev: Session[]) => [...prev, newSession]);
+        sessionStore.setSessions((prev: Session[]) => [newSession, ...prev]);
         sessionStore.setActiveSessionId(newSession.id);
         sessionStore.setIsDraft(false);
         streaming.streamResponse(
@@ -132,15 +139,44 @@ export function useChat() {
         return;
       }
 
-      if (!sessionStore.activeSessionId) return;
+      // Use refs for latest state — avoids stale closure on rapid session switch
+      const activeId = activeSessionIdRef.current;
+      if (!activeId) return;
 
-      sessionStore.updateSession(sessionStore.activeSessionId, (s) => ({
+      sessionStore.updateSession(activeId, (s) => ({
         ...s,
         messages: [...s.messages, userMsg],
       }));
 
-      const currentSession = sessionStore.sessions.find(
-        (s: Session) => s.id === sessionStore.activeSessionId
+      // If already streaming with OpenCode, just queue the message — OpenCode
+      // queues it and the AI will read it between tool calls.  No need to
+      // start a new streamResponse (the existing SSE stream picks it up).
+      if (streaming.isStreaming && opencodeConnected) {
+        const currentSession = sessionsRef.current.find((s: Session) => s.id === activeId);
+        const ocSessionId = currentSession?.ocSessionId;
+        if (ocSessionId) {
+          // Mark queued message as pending in the UI
+          sessionStore.updateSession(activeId, (s) => ({
+            ...s,
+            messages: s.messages.map((m) =>
+              m.id === userMsg.id ? { ...m, statusText: 'pending' } : m
+            ),
+          }));
+          const imageTuples: [string, string][] | undefined =
+            userMsg.images && userMsg.images.length > 0
+              ? userMsg.images.map((img: ImageAttachment) => [img.mediaType, img.data] as [string, string])
+              : undefined;
+          invoke('opencode_queue', {
+            ocSessionId,
+            content: userMsg.content,
+            images: imageTuples,
+          }).catch((err) => console.error('[useChat] queued message send failed:', err));
+          return;
+        }
+      }
+
+      const currentSession = sessionsRef.current.find(
+        (s: Session) => s.id === activeId
       );
       const allMessages = currentSession ? [...currentSession.messages, userMsg] : [userMsg];
       const ocSessionId = currentSession?.ocSessionId;
@@ -148,9 +184,9 @@ export function useChat() {
       if (opencodeConnected && !ocSessionId) {
         try {
           const ocId = await invoke<string>('opencode_create_session');
-          sessionStore.updateSession(sessionStore.activeSessionId, (s) => ({ ...s, ocSessionId: ocId }));
+          sessionStore.updateSession(activeId, (s) => ({ ...s, ocSessionId: ocId }));
           streaming.streamResponse(
-            sessionStore.activeSessionId,
+            activeId,
             allMessages,
             sessionStore.updateSession,
             handleUsage,
@@ -160,7 +196,7 @@ export function useChat() {
           );
         } catch {
           streaming.streamResponse(
-            sessionStore.activeSessionId,
+            activeId,
             allMessages,
             sessionStore.updateSession,
             handleUsage,
@@ -171,7 +207,7 @@ export function useChat() {
         }
       } else {
         streaming.streamResponse(
-          sessionStore.activeSessionId,
+          activeId,
           allMessages,
           sessionStore.updateSession,
           handleUsage,
@@ -191,7 +227,8 @@ export function useChat() {
    * command to the OpenCode server if a session is active.
    */
   const abortOpencode = useCallback(() => {
-    streaming.cancelledRef.current = true;
+    console.log('[useChat] abortOpencode → cancelStream()');
+    streaming.cancelStream();
     streaming.setIsStreaming(false);
 
     const activeId = sessionStore.activeSessionId;
@@ -212,9 +249,16 @@ export function useChat() {
   }, [streaming, sessionStore]);
 
   const switchSession = useCallback((id: string) => {
-    streaming.cancelledRef.current = true;
+    // NEVER cancel the in-flight stream when switching sessions.
+    // The stream writes to a specific sessionId via updateSession, so it
+    // keeps accumulating content in the background even while the user
+    // views a different session.  When the user switches back, the
+    // completed (or still-streaming) reply is already there.
+    // Only abortOpencode() should cancel a stream (explicit user action).
+    const currentId = activeSessionIdRef.current;
+    console.log('[useChat] switchSession (from', currentId, 'to', id, ') — stream NOT cancelled');
     sessionStore.switchSession(id, opencodeConnected);
-  }, [streaming.cancelledRef, sessionStore.switchSession, opencodeConnected]);
+  }, [sessionStore.switchSession, opencodeConnected]);
 
   const deleteSession = useCallback((id: string) => {
     sessionStore.deleteSession(id, opencodeConnected);
@@ -238,10 +282,15 @@ export function useChat() {
     activeSessionId: sessionStore.activeSessionId ?? '__draft__',
     isDraft: sessionStore.isDraft,
     isStreaming: streaming.isStreaming,
+    streamingSessionId: streaming.streamingSessionId,
     loaded: sessionStore.loaded,
     usage,
     weeklyUsage: sessionStore.weeklyUsage,
     opencodeConnected,
+    sseConnected: globalSSE.sseConnected,
+    busySessions: globalSSE.busySessions,
+    unreadSessions: globalSSE.unreadSessions,
+    markSessionRead: globalSSE.markRead,
     sendMessage,
     addSession: sessionStore.addSession,
     switchSession,

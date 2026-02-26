@@ -6,7 +6,22 @@
  * by toggling CSS classes on the root element before calling the native API.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window';
+import { isTauri } from '../utils/platform';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TauriWindow = any;
+
+let _getCurrentWindow: (() => TauriWindow) | null = null;
+if (isTauri) {
+  import('@tauri-apps/api/window').then((mod) => {
+    _getCurrentWindow = mod.getCurrentWindow;
+  });
+}
+
+function getCurrentWindow(): TauriWindow | null {
+  if (!isTauri || !_getCurrentWindow) return null;
+  try { return _getCurrentWindow(); } catch { return null; }
+}
 import { useClickFlash } from '../hooks/useClickFlash';
 import { Diamond } from './Diamond';
 import '../styles/titlebar.css';
@@ -23,21 +38,35 @@ export function Titlebar() {
 
   useEffect(() => {
     if (!appWindow) return;
-    const unlistenResize = appWindow.onResized(async () => {
+    let mounted = true;
+    let cleanupResize: (() => void) | null = null;
+    let cleanupFocus: (() => void) | null = null;
+
+    appWindow.onResized(async () => {
+      if (!mounted) return;
       setIsMaximized(await appWindow.isMaximized());
+    }).then((fn: () => void) => {
+      if (!mounted) { fn(); return; }
+      cleanupResize = fn;
     });
-    const unlistenFocus = appWindow.onFocusChanged(({ payload: focused }) => {
-      if (!focused) return;
+
+    appWindow.onFocusChanged(({ payload: focused }: { payload: boolean }) => {
+      if (!mounted || !focused) return;
       const root = document.getElementById('root');
       if (!root || !root.dataset.wasMinimized) return;
       delete root.dataset.wasMinimized;
       root.classList.remove('win-minimize');
       root.classList.add('win-restore');
       setTimeout(() => root.classList.remove('win-restore'), 300);
+    }).then((fn: () => void) => {
+      if (!mounted) { fn(); return; }
+      cleanupFocus = fn;
     });
+
     return () => {
-      unlistenResize.then((fn) => fn());
-      unlistenFocus.then((fn) => fn());
+      mounted = false;
+      cleanupResize?.();
+      cleanupFocus?.();
     };
   }, [appWindow]);
 

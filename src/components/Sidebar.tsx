@@ -21,6 +21,14 @@ interface SidebarProps {
   onToggle: () => void;
   sessions: Session[];
   activeSessionId: string;
+  /** The session ID currently being streamed to by this client. */
+  streamingSessionId?: string | null;
+  /** Set of OC session IDs that are busy (streaming from any source). */
+  busySessions?: Set<string>;
+  /** Set of OC session IDs with unread messages. */
+  unreadSessions?: Set<string>;
+  /** When incremented, force the settings popup open (used by Ctrl+O). */
+  openSettingsTrigger?: number;
   onNewSession: () => void;
   onSwitchSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
@@ -40,12 +48,16 @@ export function Sidebar({
   onToggle,
   sessions,
   activeSessionId,
+  streamingSessionId,
+  busySessions,
+  unreadSessions,
   onNewSession,
   onSwitchSession,
   onDeleteSession,
   onArchiveSession,
   onRenameSession,
   onReorderSessions,
+  openSettingsTrigger,
   onSelectSettingsPage,
   onReauth,
   onShowReadme,
@@ -63,6 +75,13 @@ export function Sidebar({
       setRenamingId(null);
     }
   }, [open]);
+
+  // External trigger (Ctrl+O) opens the settings popup
+  useEffect(() => {
+    if (openSettingsTrigger && openSettingsTrigger > 0) {
+      setSettingsMenuOpen(true);
+    }
+  }, [openSettingsTrigger]);
 
   const openMenu = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -222,23 +241,33 @@ export function Sidebar({
                         onPointerDown={(e) => handleSessionPointerDown(e, sIdx)}
                         onClick={(e) => { if ((e.target as HTMLElement).closest('.sidebar-menu, .sidebar-kebab')) return; if (session.id !== activeSessionId) onSwitchSession(session.id); }}
                       >
-                        {renamingId === session.id ? (
-                          <input
-                            className="sidebar-rename-input"
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onBlur={commitRename}
-                            onKeyDown={(e) => {
-                              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                              if (e.key === 'Enter') commitRename();
-                              if (e.key === 'Escape') setRenamingId(null);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            autoFocus
-                          />
-                        ) : (
-                          <span className="sidebar-session-name">{session.name}</span>
-                        )}
+                        {(() => {
+                          const isBusy = (streamingSessionId === session.id) ||
+                            (session.ocSessionId ? busySessions?.has(session.ocSessionId) : false);
+                          const isUnread = !isBusy && session.id !== activeSessionId &&
+                            (session.ocSessionId ? unreadSessions?.has(session.ocSessionId) : false);
+                          return renamingId === session.id ? (
+                            <input
+                              className="sidebar-rename-input"
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onBlur={commitRename}
+                              onKeyDown={(e) => {
+                                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                                if (e.key === 'Enter') commitRename();
+                                if (e.key === 'Escape') setRenamingId(null);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              autoFocus
+                            />
+                          ) : (
+                            <>
+                              {isBusy && <span className="sidebar-indicator sidebar-indicator--busy" title="Streaming" />}
+                              {isUnread && <span className="sidebar-indicator sidebar-indicator--unread" title="New message" />}
+                              <span className="sidebar-session-name">{session.name}</span>
+                            </>
+                          );
+                        })()}
                         <button
                           className="sidebar-kebab"
                           onPointerDown={(e) => e.stopPropagation()}

@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -331,5 +332,49 @@
 .tab-close:hover {
   color: var(--text-primary);
   background: var(--bg-active);
+}
+
+/* ── Mobile chat layout ── */
+@media (max-width: 768px) {
+  .chat-body {
+    padding-left: 38px;
+  }
+
+  .chat-body.sidebar-open {
+    padding-left: 0;
+  }
+
+  .chat-body.changes-open {
+    padding-right: 0;
+  }
+
+  .chat-brand {
+    padding: 12px 0 0 16px;
+    font-size: 16px;
+  }
+
+  .chat-session-title {
+    padding: 10px 12px 0 12px;
+    font-size: 1.1em;
+  }
+
+  .chat-search-bar {
+    top: 44px;
+    right: 12px;
+    left: 12px;
+  }
+
+  .chat-search-input {
+    width: 100%;
+  }
+
+  .fc-toggle-btn {
+    top: 8px !important;
+    right: 10px !important;
+  }
+
+  .tab-bar {
+    padding: 0 12px;
+  }
 }
 

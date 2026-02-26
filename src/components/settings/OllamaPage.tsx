@@ -9,8 +9,9 @@
  * ollama_install, ollama_toggle, ollama_set_config.
  */
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { load } from '@tauri-apps/plugin-store';
+import { invoke } from '../../utils/invoke-shim';
+import { isTauri } from '../../utils/platform';
+import { loadWebStore } from '../../utils/web-store';
 import { useI18n } from '../../i18n';
 import '../../styles/settings-ollama.css';
 
@@ -57,7 +58,9 @@ export function OllamaPage({ onFlash }: OllamaPageProps) {
       setInstalled(isInstalled);
       if (!isInstalled) return;
       try {
-        const store = await load('settings.json');
+        const store = isTauri
+          ? await import('@tauri-apps/plugin-store').then(m => m.load('settings.json'))
+          : await loadWebStore('settings.json');
         const savedEnabled = await store.get<boolean>('ollama_enabled');
         const savedUrl = await store.get<string>('ollama_url');
         const savedModel = await store.get<string>('ollama_model');
